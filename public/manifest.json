@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "PDFE — Yerel Akıllı PDF",
+  "version": "0.1.0",
+  "description": "Tarayıcıda açılan PDF'leri tamamen yerel akıllı araçlarla işler: OCR, anlamsal arama, özetleme, veri çıkarma.",
+  "minimum_chrome_version": "128",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "PDFE"
+  }
+}
