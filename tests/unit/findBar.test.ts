@@ -17,4 +17,19 @@ describe("findInSpans", () => {
   it("treats invalid regex as no results", () => {
     expect(findInSpans(spans, "(", true)).toEqual([]);
   });
+  it("returns page-local spanIndexes across multiple pages", () => {
+    const multiPage = [
+      { text: "one", pageNumber: 1 },
+      { text: "two", pageNumber: 1 },
+      { text: "needle", pageNumber: 1 },
+      { text: "three", pageNumber: 2 },
+      { text: "needle", pageNumber: 2 },
+      { text: "four", pageNumber: 2 },
+    ];
+    const r = findInSpans(multiPage, "needle");
+    expect(r).toEqual([
+      { pageNumber: 1, spanIndex: 2, text: "needle" },
+      { pageNumber: 2, spanIndex: 1, text: "needle" },
+    ]);
+  });
 });

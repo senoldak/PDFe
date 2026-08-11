@@ -18,9 +18,13 @@ export function findInSpans(
   const results: FindResult[] = [];
   try {
     const re = regex ? new RegExp(query, "gi") : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-    spans.forEach((span, idx) => {
+    const pageCounts = new Map<number, number>();
+    spans.forEach((span) => {
       re.lastIndex = 0;
-      if (re.test(span.text)) results.push({ pageNumber: span.pageNumber ?? -1, spanIndex: idx, text: span.text });
+      const pageNumber = span.pageNumber ?? -1;
+      const spanIndex = pageCounts.get(pageNumber) ?? 0;
+      pageCounts.set(pageNumber, spanIndex + 1);
+      if (re.test(span.text)) results.push({ pageNumber, spanIndex, text: span.text });
     });
   } catch {
     return [];
