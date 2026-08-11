@@ -6,6 +6,7 @@ export interface OcrOptions {
   corePath: string;
   workerPath: string;
   lang: string;
+  gzip?: boolean;
 }
 
 export class OcrEngine {
@@ -26,6 +27,7 @@ export class OcrEngine {
       langPath: this.options.langPath,
       corePath: this.options.corePath,
       workerPath: this.options.workerPath,
+      gzip: this.options.gzip ?? false,
       logger: (m) => {
         if (m.status === "recognizing text" && this.progressCb) {
           this.progressCb(m.progress);

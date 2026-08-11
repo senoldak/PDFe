@@ -67,13 +67,14 @@ async function init(): Promise<void> {
 
   const pipeline = new EnginePipeline({
     ocr: new OcrEngine({
-      langPath: chrome.runtime.getURL("tesseract/"),
+      langPath: chrome.runtime.getURL("models/tessdata/"),
       corePath: chrome.runtime.getURL("tesseract-core/"),
       workerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
       lang: "tur",
+      gzip: false,
     }),
     semantic: new SemanticSearch(),
-    ocrLangPath: chrome.runtime.getURL("tesseract/"),
+    ocrLangPath: chrome.runtime.getURL("models/tessdata/"),
     ocrCorePath: chrome.runtime.getURL("tesseract-core/"),
     ocrWorkerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
   });
