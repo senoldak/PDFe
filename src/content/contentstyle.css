@@ -1,0 +1,3 @@
+html:has(> body.pdfe-content) {
+  overflow: hidden;
+}
