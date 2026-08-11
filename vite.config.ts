@@ -24,7 +24,7 @@ export default defineConfig({
     format: "es",
   },
   test: {
-    environment: "node",
+    environment: "jsdom",
     include: ["tests/unit/**/*.test.ts"],
   },
 });
