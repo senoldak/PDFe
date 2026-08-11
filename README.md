@@ -1,5 +1,12 @@
 # PDFE — Yerel Akıllı PDF
 
+![Status](https://img.shields.io/badge/status-M1_%2B_M2-brightgreen)
+![Offline](https://img.shields.io/badge/offline-full_local-brightgreen)
+![OCR](https://img.shields.io/badge/OCR-tesseract.js-blue)
+![Semantic Search](https://img.shields.io/badge/semantic_search-transformers.js-blue)
+![Summary](https://img.shields.io/badge/summary-local_BART-blue)
+![Extraction](https://img.shields.io/badge/extraction-template_based-blue)
+
 Tarayıcıda açılan PDF'leri tamamen **yerel** akıllı araçlarla işleyen Chrome eklentisi:
 OCR, anlamsal arama, özetleme ve veri çıkarma. Hiçbir içerik cihazdan çıkmaz.
 
@@ -10,6 +17,22 @@ OCR, anlamsal arama, özetleme ve veri çıkarma. Hiçbir içerik cihazdan çık
 - Anlamsal arama (transformers.js embedding) — kavramsal eşleşme
 - Özetleme (yerel BART modeli)
 - Veri çıkarma (fatura: No, tarih, tutar, KDV, IBAN, tedarikçi)
+
+## Ekran Görüntüsü
+
+_Yakında:_ viewer, arama ve akıllı panel ekran görüntüleri `docs/screenshots/` altına eklenecek.
+
+## Kullanım
+
+Eklentiyi yükledikten sonra Chrome'da herhangi bir PDF'i açmanız yeterli:
+
+- Web üzerindeki PDF'ler (MIME `application/pdf`) otomatik olarak PDFE viewer'ına yönlendirilir.
+- Yerel dosyalar (`file://`) için uzantının `chrome://extensions` sayfasında
+  **"Dosya URL'lerine erişime izin ver"** seçeneğini açın.
+- Viewer araç çubuğu: sayfa gezinme, zoom, metin araması.
+- Akıllı panel: OCR durumu, anlamsal arama, özet ve veri çıkarma.
+- Tüm model ağırlıkları eklentiyle birlikte paketlenir; ilk kullanımda indirme yapılmaz,
+  tüm işlemler çevrimdışı çalışır.
 
 ## Kurulum
 
@@ -27,6 +50,16 @@ Chrome → `chrome://extensions` → Geliştirici modu → "Paketlenmemiş öğe
 npm test          # birim testler (vitest)
 npm run test:e2e  # e2e (playwright) — eklenti yüklenir, viewer akışı doğrulanır
 ```
+
+## Kapsam ve Yol Haritası
+
+Bu sürüm **M1 (Çekirdek: viewer, yönlendirme, pipeline)** ve **M2 (Akıllı Motor: OCR,
+özetleme, veri çıkarma, anlamsal arama)** kapsamını sunar. Aşağıdaki aşamalar
+henüz **uygulanmadı**:
+
+- **M3 — Düzenleme Seti:** form doldurma, imza, sayfa işlemleri, merge/split
+- **M4 — Doküman Yönetimi:** IndexedDB arşivi, etiketleme
+- **M5 — Geliştirici API:** content script + RPC
 
 ## Gizlilik
 
