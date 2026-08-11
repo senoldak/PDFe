@@ -4,6 +4,23 @@
   "version": "0.1.0",
   "description": "Tarayıcıda açılan PDF'leri tamamen yerel akıllı araçlarla işler: OCR, anlamsal arama, özetleme, veri çıkarma.",
   "minimum_chrome_version": "128",
+  "permissions": [
+    "declarativeNetRequestWithHostAccess",
+    "tabs",
+    "webNavigation",
+    "storage"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*", "file://*/*"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "css": ["contentstyle.css"],
+      "js": ["contentscript.js"]
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
@@ -14,5 +31,20 @@
   },
   "action": {
     "default_title": "PDFE"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "viewer.html",
+        "pdf.worker.mjs",
+        "models/*",
+        "http:/*",
+        "https:/*",
+        "file:/*",
+        "blob:*",
+        "data:*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
