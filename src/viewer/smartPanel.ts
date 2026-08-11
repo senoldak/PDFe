@@ -1,6 +1,8 @@
 import type { DocumentCorpus, EngineState, SearchResult } from "../shared/types";
 import type { EnginePipeline } from "../engine/pipeline";
 import type { Summarizer } from "../engine/summarize/summarizer";
+import { extractFields } from "../engine/extract/extract";
+import { INVOICE_SCHEMA } from "../engine/extract/schemas";
 
 export interface SmartPanelCallbacks {
   pipeline: EnginePipeline;
@@ -55,6 +57,8 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
   const resultsEl = panel.querySelector<HTMLElement>("#searchResults")!;
   const summarizeBtn = panel.querySelector<HTMLButtonElement>("#summarizeBtn")!;
   const summaryOutput = panel.querySelector<HTMLElement>("#summaryOutput")!;
+  const extractBtn = panel.querySelector<HTMLButtonElement>("#extractBtn")!;
+  const extractOutput = panel.querySelector<HTMLElement>("#extractOutput")!;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   input.addEventListener("input", () => {
@@ -71,6 +75,25 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
     const corpus = cb.getCorpus?.() ?? null;
     if (!cb.summarizer || !corpus) return;
     summaryOutput.textContent = await cb.summarizer.summarize(corpus.fullText);
+  });
+
+  extractBtn.addEventListener("click", () => {
+    const corpus = cb.getCorpus?.() ?? null;
+    if (!corpus) return;
+    const result = extractFields(corpus, INVOICE_SCHEMA);
+    extractOutput.innerHTML = "";
+    const table = document.createElement("table");
+    for (const [key, field] of Object.entries(INVOICE_SCHEMA.fields)) {
+      const row = document.createElement("tr");
+      const labelCell = document.createElement("td");
+      labelCell.textContent = field.label;
+      const valueCell = document.createElement("td");
+      const value = result[key];
+      valueCell.textContent = value == null ? "—" : String(value);
+      row.append(labelCell, valueCell);
+      table.appendChild(row);
+    }
+    extractOutput.appendChild(table);
   });
 
   function renderResults(results: SearchResult[]): void {
