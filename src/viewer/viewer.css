@@ -7,3 +7,10 @@ html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; backgr
 .textLayer { position: absolute; inset: 0; overflow: hidden; opacity: .25; line-height: 1; text-align: initial; transform-origin: 0 0; }
 .textLayer span { position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
 .textLayer ::selection { background: rgba(0, 122, 255, .6); }
+.textLayer span.pdfe-highlight { background: rgba(255, 200, 0, .5); }
+#smartPanel { position: fixed; top: 48px; right: 0; bottom: 0; width: 340px; background: #1f1f1f; border-left: 1px solid #444; transform: translateX(100%); transition: transform .2s; display: flex; flex-direction: column; z-index: 10; }
+#smartPanel.open { transform: translateX(0); }
+#smartPanel nav { display: flex; }
+#smartPanel nav button { flex: 1; padding: 8px; background: none; color: #ccc; border: none; cursor: pointer; }
+#smartPanel nav button.active { background: #333; color: #fff; }
+#smartPanel section { padding: 12px; overflow: auto; flex: 1; }
