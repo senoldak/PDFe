@@ -30,4 +30,9 @@ for (const file of ["contentstyle.js", "contentstyle.js.map"]) {
 }
 cpSync(resolve(root, "src/content/contentstyle.css"), resolve(dist, "contentstyle.css"));
 
+const tessDir = resolve(root, "node_modules/tesseract.js/dist");
+if (existsSync(tessDir)) cpSync(tessDir, resolve(dist, "tesseract"), { recursive: true });
+const coreDir = resolve(root, "node_modules/tesseract.js-core");
+if (existsSync(coreDir)) cpSync(coreDir, resolve(dist, "tesseract-core"), { recursive: true });
+
 console.log("Static assets copied to dist/");

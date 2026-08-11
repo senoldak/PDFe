@@ -38,6 +38,8 @@
         "viewer.html",
         "pdf.worker.mjs",
         "models/*",
+        "tesseract/*",
+        "tesseract-core/*",
         "http:/*",
         "https:/*",
         "file:/*",
