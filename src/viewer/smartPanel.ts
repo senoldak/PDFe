@@ -3,7 +3,7 @@ import type { EnginePipeline } from "../engine/pipeline";
 
 export interface SmartPanelCallbacks {
   pipeline: EnginePipeline;
-  onHighlight: (pageNumber: number) => void;
+  onHighlight: (result: SearchResult) => void;
 }
 
 export function createSmartPanel(): HTMLElement {
@@ -67,7 +67,7 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
     for (const r of results) {
       const li = document.createElement("li");
       li.textContent = `${r.pageNumber}. sayfa — ${r.span.text.slice(0, 60)}`;
-      li.onclick = () => cb.onHighlight(r.pageNumber);
+      li.onclick = () => cb.onHighlight(r);
       resultsEl.appendChild(li);
     }
   }

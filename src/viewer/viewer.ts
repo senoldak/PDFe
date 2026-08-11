@@ -75,7 +75,13 @@ async function init(): Promise<void> {
     ocrCorePath: chrome.runtime.getURL("tesseract-core/"),
     ocrWorkerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
   });
-  const panelApi = bindSmartPanel(panel, { pipeline, onHighlight: (n) => scrollToPage(n) });
+  const panelApi = bindSmartPanel(panel, {
+    pipeline,
+    onHighlight: (r) => {
+      highlightSpans(renderedLayers, [{ pageNumber: r.pageNumber, spanIndex: r.spanIndex }]);
+      scrollToPage(r.pageNumber);
+    },
+  });
   pipeline.setState((s) => panelApi.setState(s));
 
   pdf = await loadDocument(file);
