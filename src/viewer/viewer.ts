@@ -5,6 +5,7 @@ import { createToolbar, updatePageInfo } from "./toolbar";
 import { findInSpans, type FindResult } from "./findBar";
 import { highlightSpans } from "./highlight";
 import { createSmartPanel, bindSmartPanel } from "./smartPanel";
+import { configureRuntime } from "../engine/runtime";
 import { EnginePipeline } from "../engine/pipeline";
 import { OcrEngine } from "../engine/ocr/ocr";
 import { SemanticSearch } from "../engine/search/semantic";
@@ -42,6 +43,7 @@ function scrollToPage(n: number): void {
 }
 
 async function init(): Promise<void> {
+  configureRuntime();
   const file = getFileParam();
   const app = document.getElementById("app")!;
   app.appendChild(

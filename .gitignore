@@ -2,3 +2,8 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+
+# Model binary assets (indirilir: npm run fetch:models)
+public/models/onnx/
+public/models/ort/
+public/models/tessdata/*.traineddata
