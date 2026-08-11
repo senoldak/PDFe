@@ -1,0 +1,6 @@
+PDFE
+Copyright 2026 PDFE contributors
+
+PDFE, Apache 2.0 lisansıyla dağıtılmaktadır.
+Gömülü üçüncü taraf bileşenlerin lisansları için docs/MODEL_LICENSES.md ve
+package.json bağımlılık listesine bakınız.
