@@ -1,9 +1,12 @@
-import type { EngineState, SearchResult } from "../shared/types";
+import type { DocumentCorpus, EngineState, SearchResult } from "../shared/types";
 import type { EnginePipeline } from "../engine/pipeline";
+import type { Summarizer } from "../engine/summarize/summarizer";
 
 export interface SmartPanelCallbacks {
   pipeline: EnginePipeline;
   onHighlight: (result: SearchResult) => void;
+  summarizer?: Summarizer;
+  getCorpus?: () => DocumentCorpus | null;
 }
 
 export function createSmartPanel(): HTMLElement {
@@ -50,6 +53,8 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
   const progress = panel.querySelector<HTMLProgressElement>("#ocrProgress")!;
   const input = panel.querySelector<HTMLInputElement>("#semanticInput")!;
   const resultsEl = panel.querySelector<HTMLElement>("#searchResults")!;
+  const summarizeBtn = panel.querySelector<HTMLButtonElement>("#summarizeBtn")!;
+  const summaryOutput = panel.querySelector<HTMLElement>("#summaryOutput")!;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   input.addEventListener("input", () => {
@@ -60,6 +65,12 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
       const results = await cb.pipeline.search(q);
       renderResults(results);
     }, 300);
+  });
+
+  summarizeBtn.addEventListener("click", async () => {
+    const corpus = cb.getCorpus?.() ?? null;
+    if (!cb.summarizer || !corpus) return;
+    summaryOutput.textContent = await cb.summarizer.summarize(corpus.fullText);
   });
 
   function renderResults(results: SearchResult[]): void {
