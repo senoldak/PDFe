@@ -4,7 +4,11 @@ import { renderPage, type RenderedPage } from "./pageRenderer";
 import { createToolbar, updatePageInfo } from "./toolbar";
 import { findInSpans, type FindResult } from "./findBar";
 import { highlightSpans } from "./highlight";
-import { createSmartPanel } from "./smartPanel";
+import { createSmartPanel, bindSmartPanel } from "./smartPanel";
+import { EnginePipeline } from "../engine/pipeline";
+import { OcrEngine } from "../engine/ocr/ocr";
+import { SemanticSearch } from "../engine/search/semantic";
+import type { PDFPageProxy } from "pdfjs-dist";
 
 const renderedPages: RenderedPage[] = [];
 const renderedLayers: HTMLElement[] = [];
@@ -55,12 +59,33 @@ async function init(): Promise<void> {
   const pages = document.createElement("div");
   pages.id = "pages";
   app.appendChild(pages);
-  app.appendChild(createSmartPanel());
+
+  const panel = createSmartPanel();
+  app.appendChild(panel);
+
+  const pipeline = new EnginePipeline({
+    ocr: new OcrEngine({
+      langPath: chrome.runtime.getURL("tesseract/"),
+      corePath: chrome.runtime.getURL("tesseract-core/"),
+      workerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
+      lang: "tur",
+    }),
+    semantic: new SemanticSearch(),
+    ocrLangPath: chrome.runtime.getURL("tesseract/"),
+    ocrCorePath: chrome.runtime.getURL("tesseract-core/"),
+    ocrWorkerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
+  });
+  const panelApi = bindSmartPanel(panel, { pipeline, onHighlight: (n) => scrollToPage(n) });
+  pipeline.setState((s) => panelApi.setState(s));
 
   pdf = await loadDocument(file);
   const title = document.getElementById("title");
   if (title) title.textContent = file.split("/").pop() || file;
   await renderAll();
+
+  const pageProxies: PDFPageProxy[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) pageProxies.push(await pdf.getPage(i));
+  await pipeline.run(pageProxies, { scale });
 }
 
 function getFileParam(): string {
