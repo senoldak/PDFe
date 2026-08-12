@@ -1,5 +1,5 @@
-import { cpSync, mkdirSync, existsSync, renameSync, rmSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { cpSync, mkdirSync, existsSync, renameSync, rmSync, readdirSync } from "node:fs";
+import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -18,17 +18,48 @@ if (existsSync(pdfWorker)) {
   cpSync(pdfWorker, resolve(dist, "pdf.worker.mjs"));
 }
 
-const nestedHtml = resolve(dist, "src/viewer/viewer.html");
-if (existsSync(nestedHtml)) {
-  renameSync(nestedHtml, resolve(dist, "viewer.html"));
-  rmSync(resolve(dist, "src"), { recursive: true, force: true });
+const entries = readdirSync(dist, { recursive: true }).map((p) => p.replaceAll("\\", "/"));
+const matchBase = (prefix, suffix) =>
+  entries.filter((p) => basename(p).startsWith(prefix) && basename(p).endsWith(suffix));
+
+const viewerHtml = entries.filter((p) => basename(p) === "viewer.html");
+if (viewerHtml.length === 0) {
+  console.error("FATAL: no viewer.html produced under dist/; manifest viewer reference would break");
+  process.exit(1);
+}
+if (viewerHtml.length > 1) {
+  console.error(`FATAL: multiple viewer.html files under dist/ (${viewerHtml.join(", ")}); ambiguous`);
+  process.exit(1);
+}
+if (viewerHtml[0] !== "viewer.html") {
+  renameSync(resolve(dist, viewerHtml[0]), resolve(dist, "viewer.html"));
+  let dir = dirname(resolve(dist, viewerHtml[0]));
+  while (dir !== dist) {
+    rmSync(dir, { recursive: true, force: true });
+    dir = dirname(dir);
+  }
 }
 
-for (const file of ["contentstyle.js", "contentstyle.js.map"]) {
-  const path = resolve(dist, file);
-  if (existsSync(path)) rmSync(path);
+if (matchBase("viewer", ".js").length === 0) {
+  console.error("FATAL: no viewer.js produced under dist/; aborting");
+  process.exit(1);
+}
+if (matchBase("viewer", ".css").length === 0) {
+  console.error("FATAL: no viewer css produced under dist/; aborting");
+  process.exit(1);
+}
+if (matchBase("contentstyle", ".css").length === 0) {
+  console.error("FATAL: no contentstyle css produced under dist/; aborting");
+  process.exit(1);
+}
+for (const p of [...matchBase("contentstyle", ".js"), ...matchBase("contentstyle", ".js.map")]) {
+  rmSync(resolve(dist, p));
 }
 cpSync(resolve(root, "src/content/contentstyle.css"), resolve(dist, "contentstyle.css"));
+
+for (const p of matchBase("ort-wasm-simd-threaded.jsep", ".wasm")) {
+  if (!p.startsWith("models/")) rmSync(resolve(dist, p));
+}
 
 const tessDir = resolve(root, "node_modules/tesseract.js/dist");
 if (existsSync(tessDir)) cpSync(tessDir, resolve(dist, "tesseract"), { recursive: true });

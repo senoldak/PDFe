@@ -1,4 +1,5 @@
-import { mkdirSync, existsSync, copyFileSync, createWriteStream, renameSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, existsSync, copyFileSync, createWriteStream, createReadStream, renameSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
@@ -51,6 +52,26 @@ for (const lang of ["tur", "eng"]) {
 const RETRIES = 4;
 const CONCURRENCY = 3;
 
+const SHAS = {
+  "onnx/Xenova/all-MiniLM-L6-v2/config.json": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
+  "onnx/Xenova/all-MiniLM-L6-v2/tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+  "onnx/Xenova/all-MiniLM-L6-v2/tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
+  "onnx/Xenova/all-MiniLM-L6-v2/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+  "onnx/Xenova/all-MiniLM-L6-v2/vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+  "onnx/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
+  "onnx/Xenova/distilbart-cnn-6-6/config.json": "2e16f80f1dbbda53094b15f45d6e2953ced17bff4c6f9dc3f8e24ebbe701e09d",
+  "onnx/Xenova/distilbart-cnn-6-6/generation_config.json": "85c3e01442b11210b4a8f07fccadb863288720812e4b073f67ede39fae1feeba",
+  "onnx/Xenova/distilbart-cnn-6-6/tokenizer.json": "2f1a555a1ee93656b4e6f67aa75d492a843c225e5ef754bae24c36bd85851cd7",
+  "onnx/Xenova/distilbart-cnn-6-6/tokenizer_config.json": "c56f73109691e1540cff519360cd1472045cd3d9d42f687d4478fe87f5f10c06",
+  "onnx/Xenova/distilbart-cnn-6-6/special_tokens_map.json": "8293ae960b0a0852d4d3813118030a1149a3ed9fe37bc2e1e7b3c2e62eb2d4b7",
+  "onnx/Xenova/distilbart-cnn-6-6/vocab.json": "ed19656ea1707df69134c4af35c8ceda2cc9860bf2c3495026153a133670ab5e",
+  "onnx/Xenova/distilbart-cnn-6-6/merges.txt": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+  "onnx/Xenova/distilbart-cnn-6-6/onnx/encoder_model_quantized.onnx": "14d9b2d8fb1b6ebf7133046eaba3ea0dc0539be0523caa14c3e9b22131518a02",
+  "onnx/Xenova/distilbart-cnn-6-6/onnx/decoder_model_merged_quantized.onnx": "7a584dce621f77e39008055b6ef4ae9d3698241758e568edf3e5b0ad5fd6ccb2",
+  "tessdata/tur.traineddata": "489b9504e80d7184ed1ac9a1976647884ee71149da231ff3c2c1dc15370f2f3d",
+  "tessdata/eng.traineddata": "daa0c97d651c19fba3b25e81317cd697e9908c8208090c94c3905381c23fc047",
+};
+
 async function download(job, label) {
   if (existsSync(job.out)) {
     console.log("skip", label);
@@ -67,6 +88,12 @@ async function download(job, label) {
       await streamPipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
       const len = statSync(tmp).size;
       if (len === 0) throw new Error("empty response");
+      const hash = createHash("sha256");
+      await streamPipeline(createReadStream(tmp), hash);
+      const actual = hash.digest("hex");
+      if (SHAS[label] && actual !== SHAS[label]) {
+        throw new Error(`checksum mismatch: expected ${SHAS[label]}, got ${actual}`);
+      }
       renameSync(tmp, job.out);
       console.log("saved", label, `(${len} bytes)`);
       return;

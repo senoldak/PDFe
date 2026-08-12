@@ -39,12 +39,7 @@
         "pdf.worker.mjs",
         "models/*",
         "tesseract/*",
-        "tesseract-core/*",
-        "http:/*",
-        "https:/*",
-        "file:/*",
-        "blob:*",
-        "data:*"
+        "tesseract-core/*"
       ],
       "matches": ["<all_urls>"]
     }

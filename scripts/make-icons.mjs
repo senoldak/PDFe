@@ -1,4 +1,4 @@
-// scripts/make-icons.mjs — 1x1 solid PNG üretici (bağımlılıksız)
+// scripts/make-icons.mjs — solid PNG üretici (16/48/128 px, bağımlılıksız)
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
