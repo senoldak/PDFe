@@ -57,4 +57,17 @@ describe("EnginePipeline", () => {
     expect(ocr.init).toHaveBeenCalled();
     expect(corpus.fullText).toContain("ocr1");
   });
+  it("emits ocr failed and rejects when OCR engine fails", async () => {
+    const ocr = fakeOcr();
+    (ocr.init as any).mockRejectedValue(new Error("ocr init failed"));
+    const pipeline = new EnginePipeline({
+      ocr,
+      semantic: fakeSemantic(),
+      ocrLangPath: "/", ocrCorePath: "/", ocrWorkerPath: "/",
+    });
+    const states: any[] = [];
+    pipeline.setState((s) => states.push(s));
+    await expect(pipeline.run([mockPage("   ") as any], { scale: 1 })).rejects.toThrow("ocr init failed");
+    expect(states.some((s) => s.ocr === "failed")).toBe(true);
+  });
 });

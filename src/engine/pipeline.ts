@@ -53,21 +53,26 @@ export class EnginePipeline {
 
     if (!corpusHasText(preliminary)) {
       this.emit({ ocr: "loading", ocrProgress: 0.05 });
-      await this.deps.ocr.init();
-      const ocrPages: PageText[] = [];
-      for (let i = 0; i < pages.length; i++) {
-        const canvas = document.createElement("canvas");
-        const viewport = pages[i].getViewport({ scale: opts.scale });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d")!;
-        await pages[i].render({ canvasContext: ctx, viewport }).promise;
-        const out = await this.deps.ocr.recognizePage(canvas, i + 1);
-        ocrPages.push(out);
-        this.emit({ ocr: "running", ocrProgress: (i + 1) / pages.length });
+      try {
+        await this.deps.ocr.init();
+        const ocrPages: PageText[] = [];
+        for (let i = 0; i < pages.length; i++) {
+          const canvas = document.createElement("canvas");
+          const viewport = pages[i].getViewport({ scale: opts.scale });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d")!;
+          await pages[i].render({ canvasContext: ctx, viewport }).promise;
+          const out = await this.deps.ocr.recognizePage(canvas, i + 1);
+          ocrPages.push(out);
+          this.emit({ ocr: "running", ocrProgress: (i + 1) / pages.length });
+        }
+        await this.deps.ocr.terminate();
+        finalPages = mergeTextAndOcr(textLayerPages, ocrPages);
+      } catch (err) {
+        this.emit({ ocr: "failed" });
+        throw err;
       }
-      await this.deps.ocr.terminate();
-      finalPages = mergeTextAndOcr(textLayerPages, ocrPages);
     }
 
     const corpus = buildCorpusFromPages(finalPages);

@@ -23,6 +23,10 @@ export class OcrEngine {
   }
 
   async init(): Promise<void> {
+    if (this.worker) {
+      await this.worker.terminate();
+      this.worker = null;
+    }
     this.worker = await createWorker(this.options.lang, 1, {
       langPath: this.options.langPath,
       corePath: this.options.corePath,

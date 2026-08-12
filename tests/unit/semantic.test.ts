@@ -39,4 +39,24 @@ describe("SemanticSearch", () => {
     await s.init();
     expect(await s.search("x")).toEqual([]);
   });
+  it("preserves span bbox and confidence across search", async () => {
+    const corpus: DocumentCorpus = {
+      pages: [
+        {
+          pageNumber: 1,
+          text: "vergi dairesi",
+          spans: [{ text: "vergi dairesi", bbox: { x0: 10, y0: 20, x1: 30, y1: 40 }, confidence: 0.8 }],
+          source: "textlayer",
+        },
+      ],
+      fullText: "vergi dairesi",
+    };
+    const s = new SemanticSearch();
+    await s.init();
+    await s.index(corpus);
+    const results = await s.search("vergi");
+    expect(results[0].span.text).toBe("vergi dairesi");
+    expect(results[0].span.bbox).toEqual({ x0: 10, y0: 20, x1: 30, y1: 40 });
+    expect(results[0].span.confidence).toBe(0.8);
+  });
 });

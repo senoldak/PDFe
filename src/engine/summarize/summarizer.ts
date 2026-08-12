@@ -1,9 +1,9 @@
 import { pipeline } from "@huggingface/transformers";
 
 const MODEL = "Xenova/distilbart-cnn-6-6";
-type SummarizationPipeline = (text: string, opts: { max_length: number; min_length: number }) => Promise<{ summary_text: string }[]>;
+type SummarizationPipeline = (text: string, opts: { max_new_tokens: number; min_new_tokens: number }) => Promise<{ summary_text: string }[]>;
 
-const CHUNK_WORDS = 800;
+const CHUNK_WORDS = 400;
 
 function chunkText(text: string, maxWords: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
@@ -27,7 +27,7 @@ export class Summarizer {
     if (chunks.length === 0) return "";
     const parts: string[] = [];
     for (const c of chunks) {
-      const [out] = await this.pipe(c, { max_length: Math.min(maxLength, 200), min_length: 20 });
+      const [out] = await this.pipe(c, { max_new_tokens: Math.min(maxLength, 200), min_new_tokens: 20 });
       parts.push(out.summary_text);
     }
     return parts.length === 1 ? parts[0] : parts.join(" ");

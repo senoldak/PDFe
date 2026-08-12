@@ -9,6 +9,7 @@ interface IndexedSentence {
   pageNumber: number;
   spanIndex: number;
   text: string;
+  span: TextSpan;
   embedding: number[];
 }
 
@@ -34,11 +35,11 @@ export class SemanticSearch {
   async index(corpus: DocumentCorpus): Promise<void> {
     if (!this.extractor) throw new Error("SemanticSearch not initialized");
     this.indexed = [];
-    const sentences: { pageNumber: number; spanIndex: number; text: string }[] = [];
+    const sentences: { pageNumber: number; spanIndex: number; text: string; span: TextSpan }[] = [];
     for (const page of corpus.pages) {
       page.spans.forEach((span, i) => {
         const t = span.text.trim();
-        if (t.length > 1) sentences.push({ pageNumber: page.pageNumber, spanIndex: i, text: t });
+        if (t.length > 1) sentences.push({ pageNumber: page.pageNumber, spanIndex: i, text: t, span });
       });
     }
     if (!sentences.length) return;
@@ -51,7 +52,7 @@ export class SemanticSearch {
       const rows = out.tolist();
       rows.forEach((emb, j) => {
         const s = sentences[c * 64 + j];
-        this.indexed.push({ pageNumber: s.pageNumber, spanIndex: s.spanIndex, text: s.text, embedding: emb });
+        this.indexed.push({ pageNumber: s.pageNumber, spanIndex: s.spanIndex, text: s.text, span: s.span, embedding: emb });
       });
     }
   }
@@ -67,7 +68,7 @@ export class SemanticSearch {
     return scored.map((s): SearchResult => ({
       pageNumber: s.pageNumber,
       spanIndex: s.spanIndex,
-      span: { text: s.text } as TextSpan,
+      span: { ...s.span, text: s.text },
       score: s.score,
       kind: "semantic",
     }));
