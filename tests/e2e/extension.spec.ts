@@ -6,6 +6,7 @@ async function launchExtension(): Promise<{ ctx: BrowserContext; extensionId: st
   const extensionPath = path.resolve("dist");
   const ctx = await chromium.launchPersistentContext("", {
     channel: "chromium",
+    headless: true,
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,

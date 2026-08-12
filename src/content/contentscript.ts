@@ -24,8 +24,6 @@ function init(): void {
   const currentUrl = window.location.href;
   if (isPdfUrl(currentUrl) && !currentUrl.includes("pdfe=embed")) {
     window.postMessage({ type: "pdfe:detect-pdf", url: currentUrl }, "*");
-    if (!chrome.extension.isAllowedFileSchemeAccess || document.contentType !== "application/pdf") {
-    }
   }
   if (detectPdfInDom()) {
     const src = (document.querySelector("embed[type='application/pdf']") as HTMLElement | null)?.getAttribute("src");
@@ -37,4 +35,6 @@ window.addEventListener("message", (event: MessageEvent<Message>) => {
   if (event.data?.type === "viewer:url") return;
 });
 
-init();
+if (typeof document !== "undefined") {
+  void init();
+}

@@ -10,7 +10,7 @@ export function getViewerUrl(pdfUrl: string, baseUrl = VIEWER_URL): string {
   return `${baseUrl}?file=${encodeURIComponent(pdfUrl)}${hash}`;
 }
 
-async function registerRedirectRule(): Promise<void> {
+export async function registerRedirectRule(): Promise<void> {
   const rules = await chrome.declarativeNetRequest.getDynamicRules();
   if (rules.length) {
     await chrome.declarativeNetRequest.updateDynamicRules({

@@ -1,23 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.hoisted(() => {
-  globalThis.window = {
-    location: { href: "about:blank" },
-    postMessage: () => {},
-    addEventListener: () => {},
-  } as any;
-  globalThis.document = {
-    contentType: "",
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    documentElement: {},
-    body: {},
-  } as any;
-  globalThis.chrome = {
-    runtime: { getURL: (p: string) => `chrome-extension://__EXTENSION_ID__/${p}` },
-    extension: { isAllowedFileSchemeAccess: (() => {}) as any },
-  } as any;
-});
+import { describe, expect, it } from "vitest";
 
 import { isPdfUrl } from "../../src/content/contentscript";
 

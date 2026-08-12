@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 
 export default defineConfig({
   build: {
@@ -23,8 +24,27 @@ export default defineConfig({
   worker: {
     format: "es",
   },
+  plugins: [
+    {
+      name: "pdfe-copy-static",
+      closeBundle() {
+        try {
+          execFileSync(process.execPath, [resolve(__dirname, "scripts/copy-static.mjs")], {
+            stdio: "inherit",
+          });
+        } catch (e) {
+          if (this.meta.watchMode) {
+            console.error("copy-static failed (watch continues):", e instanceof Error ? e.message : String(e));
+          } else {
+            throw e;
+          }
+        }
+      },
+    },
+  ],
   test: {
     environment: "jsdom",
     include: ["tests/unit/**/*.test.ts"],
+    setupFiles: ["tests/unit/setup.ts"],
   },
 });

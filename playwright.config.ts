@@ -5,9 +5,6 @@ export default defineConfig({
   timeout: 60_000,
   retries: 0,
   use: {
-    launchOptions: {
-      args: ["--disable-extensions-except=dist", "--load-extension=dist"],
-      channel: "chromium",
-    },
+    headless: true,
   },
 });
