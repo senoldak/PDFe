@@ -23,10 +23,12 @@ export function createSmartPanel(): HTMLElement {
     </nav>
     <section id="tab-ocr">
       <div id="ocrStatus">Hazır</div>
+      <div id="corpusStatus">Korpus hazırlanıyor…</div>
       <div id="ocrProgressWrap" hidden><progress id="ocrProgress" max="1" value="0"></progress></div>
     </section>
     <section id="tab-search" hidden>
       <input id="semanticInput" type="search" placeholder="Anlamlı ara…" />
+      <div id="searchIndexStatus">Arama endeksi hazırlanıyor…</div>
       <ul id="searchResults"></ul>
     </section>
     <section id="tab-summary" hidden>
@@ -51,6 +53,8 @@ export function createSmartPanel(): HTMLElement {
 
 export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { setState(s: EngineState): void } {
   const status = panel.querySelector<HTMLElement>("#ocrStatus")!;
+  const corpusStatus = panel.querySelector<HTMLElement>("#corpusStatus")!;
+  const searchIndexStatus = panel.querySelector<HTMLElement>("#searchIndexStatus")!;
   const progressWrap = panel.querySelector<HTMLElement>("#ocrProgressWrap")!;
   const progress = panel.querySelector<HTMLProgressElement>("#ocrProgress")!;
   const input = panel.querySelector<HTMLInputElement>("#semanticInput")!;
@@ -61,20 +65,53 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
   const extractOutput = panel.querySelector<HTMLElement>("#extractOutput")!;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let searchSeq = 0;
   input.addEventListener("input", () => {
     clearTimeout(timer);
+    searchSeq++;
     const q = input.value.trim();
-    if (q.length < 2) return;
+    if (q.length < 2) {
+      resultsEl.innerHTML = "";
+      return;
+    }
+    const seq = searchSeq;
     timer = setTimeout(async () => {
-      const results = await cb.pipeline.search(q);
-      renderResults(results);
+      try {
+        const results = await cb.pipeline.search(q);
+        if (seq === searchSeq) renderResults(results);
+      } catch (e) {
+        if (seq !== searchSeq) return;
+        resultsEl.innerHTML = "";
+        const li = document.createElement("li");
+        li.className = "error";
+        li.textContent = "Arama hatası: " + (e instanceof Error ? e.message : String(e));
+        resultsEl.appendChild(li);
+      }
     }, 300);
   });
 
+  let summarizerReady = false;
   summarizeBtn.addEventListener("click", async () => {
+    const summarizer = cb.summarizer;
     const corpus = cb.getCorpus?.() ?? null;
-    if (!cb.summarizer || !corpus) return;
-    summaryOutput.textContent = await cb.summarizer.summarize(corpus.fullText);
+    if (!summarizer) {
+      summaryOutput.textContent = "Özetleyici hazır değil.";
+      return;
+    }
+    if (!corpus || !corpus.fullText.trim()) {
+      summaryOutput.textContent = "Özetlenecek metin yok.";
+      return;
+    }
+    summaryOutput.textContent = "Özetleniyor…";
+    try {
+      if (!summarizerReady) {
+        await summarizer.init();
+        summarizerReady = true;
+      }
+      summaryOutput.textContent = await summarizer.summarize(corpus.fullText);
+    } catch (e) {
+      summaryOutput.textContent = "Özetleme hatası: " + (e instanceof Error ? e.message : String(e));
+    }
   });
 
   extractBtn.addEventListener("click", () => {
@@ -98,10 +135,26 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
 
   function renderResults(results: SearchResult[]): void {
     resultsEl.innerHTML = "";
+    if (!results.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "Sonuç yok";
+      resultsEl.appendChild(li);
+      return;
+    }
     for (const r of results) {
       const li = document.createElement("li");
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
       li.textContent = `${r.pageNumber}. sayfa — ${r.span.text.slice(0, 60)}`;
-      li.onclick = () => cb.onHighlight(r);
+      const select = (): void => cb.onHighlight(r);
+      li.addEventListener("click", select);
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          select();
+        }
+      });
       resultsEl.appendChild(li);
     }
   }
@@ -113,6 +166,8 @@ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { s
         s.ocr === "running" ? "OCR çalışıyor…" :
         s.ocr === "done" ? "OCR tamamlandı" :
         s.ocr === "failed" ? "OCR başarısız" : "Hazır";
+      corpusStatus.textContent = s.corpusReady ? "Korpus hazır" : "Korpus hazırlanıyor…";
+      searchIndexStatus.textContent = s.searchReady ? "Arama endeksi hazır" : "Arama endeksi hazırlanıyor…";
       progressWrap.hidden = s.ocr !== "running";
       progress.value = s.ocrProgress;
     },

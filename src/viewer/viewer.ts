@@ -7,8 +7,10 @@ import { highlightSpans } from "./highlight";
 import { createSmartPanel, bindSmartPanel } from "./smartPanel";
 import { configureRuntime } from "../engine/runtime";
 import { EnginePipeline } from "../engine/pipeline";
+import { Summarizer } from "../engine/summarize/summarizer";
 import { OcrEngine } from "../engine/ocr/ocr";
 import { SemanticSearch } from "../engine/search/semantic";
+import type { DocumentCorpus } from "../shared/types";
 import type { PDFPageProxy } from "pdfjs-dist";
 
 const renderedPages: RenderedPage[] = [];
@@ -65,6 +67,7 @@ async function init(): Promise<void> {
   const panel = createSmartPanel();
   app.appendChild(panel);
 
+  let pipelineCorpus: DocumentCorpus | null = null;
   const pipeline = new EnginePipeline({
     ocr: new OcrEngine({
       langPath: chrome.runtime.getURL("models/tessdata/"),
@@ -84,23 +87,41 @@ async function init(): Promise<void> {
       highlightSpans(renderedLayers, [{ pageNumber: r.pageNumber, spanIndex: r.spanIndex }]);
       scrollToPage(r.pageNumber);
     },
+    summarizer: new Summarizer(),
+    getCorpus: () => pipelineCorpus,
   });
   pipeline.setState((s) => panelApi.setState(s));
 
-  pdf = await loadDocument(file);
+  if (!file) {
+    pages.textContent = "PDF dosyası bulunamadı veya geçersiz. Lütfen geçerli bir PDF bağlantısından açın.";
+    return;
+  }
+
+  try {
+    pdf = await loadDocument(file);
+  } catch (err) {
+    pages.textContent = "PDF yüklenemedi: " + (err instanceof Error ? err.message : String(err));
+    return;
+  }
+
   const title = document.getElementById("title");
   if (title) title.textContent = file.split("/").pop() || file;
   await renderAll();
 
   const pageProxies: PDFPageProxy[] = [];
   for (let i = 1; i <= pdf.numPages; i++) pageProxies.push(await pdf.getPage(i));
-  await pipeline.run(pageProxies, { scale });
+  pipelineCorpus = await pipeline.run(pageProxies, { scale });
 }
 
 function getFileParam(): string {
   const url = new URL(location.href);
   const file = url.searchParams.get("file");
-  return file ? decodeURIComponent(file) : "";
+  if (!file) return "";
+  try {
+    return decodeURIComponent(file);
+  } catch {
+    return "";
+  }
 }
 
 void init();
