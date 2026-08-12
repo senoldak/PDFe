@@ -19,4 +19,9 @@ PDF dosyaları yalnızca tarayıcı içinde, eklentinin viewer'ında işlenir.
   (bkz. `docs/MODEL_LICENSES.md`). Güncelleme yalnızca eklenti paketi güncellenerek
   yapılır.
 - Eklentinin işlediği veri yalnızca etkin durumdaki sekmelerde açık olan PDF'lerdir;
-  başka hiçbir tarayıcı veya sistem verisine erişilmez.
+  tarayıcı veya sistemdeki diğer kişisel verilere erişilmez veya saklanmaz.
+- PDF tespiti için içerik betiği tüm `http`, `https` ve `file` sayfalarına enjekte
+  edilir; açık sayfadaki `embed`/`object`/`iframe` öğelerini ve `location.href`
+  değerini okur. Bu inceleme yalnızca PDF'leri tespit etmeye yöneliktir; `tabs`,
+  `webNavigation` ve `storage` izinleri bildirilmiş olmasına rağmen hiçbir veri ağ
+  üzerinden gönderilmez, saklanmaz ya da paylaşılmaz.
