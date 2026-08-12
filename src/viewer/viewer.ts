@@ -70,16 +70,16 @@ async function init(): Promise<void> {
   let pipelineCorpus: DocumentCorpus | null = null;
   const pipeline = new EnginePipeline({
     ocr: new OcrEngine({
-      langPath: chrome.runtime.getURL("models/tessdata/"),
-      corePath: chrome.runtime.getURL("tesseract-core/"),
-      workerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
+      langPath: chrome.runtime.getURL("dist/models/tessdata/"),
+      corePath: chrome.runtime.getURL("dist/tesseract-core/"),
+      workerPath: chrome.runtime.getURL("dist/tesseract/tesseract.min.js"),
       lang: "tur",
       gzip: false,
     }),
     semantic: new SemanticSearch(),
-    ocrLangPath: chrome.runtime.getURL("models/tessdata/"),
-    ocrCorePath: chrome.runtime.getURL("tesseract-core/"),
-    ocrWorkerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
+    ocrLangPath: chrome.runtime.getURL("dist/models/tessdata/"),
+    ocrCorePath: chrome.runtime.getURL("dist/tesseract-core/"),
+    ocrWorkerPath: chrome.runtime.getURL("dist/tesseract/tesseract.min.js"),
   });
   const panelApi = bindSmartPanel(panel, {
     pipeline,

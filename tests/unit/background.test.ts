@@ -2,14 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { getViewerUrl, registerRedirectRule } from "../../src/background/background";
 
-const BASE = "chrome-extension://__EXTENSION_ID__/viewer.html";
+const BASE = "chrome-extension://__EXTENSION_ID__/dist/viewer.html";
 
 describe("getViewerUrl", () => {
   it("encodes the pdf url as file param", () => {
     const url = getViewerUrl("https://example.com/a.pdf", BASE);
-    expect(url).toBe(
-      "chrome-extension://__EXTENSION_ID__/viewer.html?file=" + encodeURIComponent("https://example.com/a.pdf")
-    );
+    expect(url).toBe(BASE + "?file=" + encodeURIComponent("https://example.com/a.pdf"));
   });
 
   it("keeps fragment out of the encoded file param", () => {

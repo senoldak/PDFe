@@ -3,13 +3,14 @@ import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 export default defineConfig({
+  base: "./",
   build: {
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
       input: {
-        viewer: resolve(__dirname, "src/viewer/viewer.html"),
+        viewer: resolve(__dirname, "viewer.html"),
         background: resolve(__dirname, "src/background/background.ts"),
         contentscript: resolve(__dirname, "src/content/contentscript.ts"),
         contentstyle: resolve(__dirname, "src/content/contentstyle.css"),

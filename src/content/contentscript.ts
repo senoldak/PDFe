@@ -13,7 +13,7 @@ function detectPdfInDom(): boolean {
 
 function embedViewer(url: string): void {
   const iframe = document.createElement("iframe");
-  const viewerUrl = chrome.runtime.getURL(`viewer.html?file=${encodeURIComponent(url)}&pdfe=embed`);
+  const viewerUrl = chrome.runtime.getURL(`dist/viewer.html?file=${encodeURIComponent(url)}&pdfe=embed`);
   iframe.src = viewerUrl;
   iframe.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;z-index:2147483647;");
   document.documentElement.appendChild(iframe);

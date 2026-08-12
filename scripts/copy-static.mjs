@@ -7,7 +7,6 @@ const dist = resolve(root, "dist");
 
 mkdirSync(dist, { recursive: true });
 
-cpSync(resolve(root, "public/manifest.json"), resolve(dist, "manifest.json"));
 cpSync(resolve(root, "public/icons"), resolve(dist, "icons"), { recursive: true });
 if (existsSync(resolve(root, "public/models"))) {
   cpSync(resolve(root, "public/models"), resolve(dist, "models"), { recursive: true });

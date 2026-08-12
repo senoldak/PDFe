@@ -42,7 +42,7 @@ npm run fetch:models   # model dosyalarını indirir (çevrimdışı çalışma 
 npm run build
 ```
 
-Chrome → `chrome://extensions` → Geliştirici modu → "Paketlenmemiş öğe yükle" → `dist/` klasörünü seç.
+Chrome → `chrome://extensions` → Geliştirici modu → "Paketlenmemiş öğe yükle" → proje kök klasörünü (`manifest.json` içeren) seç. Derlenen dosyalar `dist/` altında paketlenir ve kök manifest bunlara işaret eder.
 
 ## Test
 

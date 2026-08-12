@@ -1,4 +1,4 @@
-const VIEWER_URL = chrome.runtime.getURL("viewer.html");
+const VIEWER_URL = chrome.runtime.getURL("dist/viewer.html");
 
 export function getViewerUrl(pdfUrl: string, baseUrl = VIEWER_URL): string {
   const hashIndex = pdfUrl.indexOf("#");

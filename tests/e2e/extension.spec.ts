@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 async function launchExtension(): Promise<{ ctx: BrowserContext; extensionId: string }> {
-  const extensionPath = path.resolve("dist");
+  const extensionPath = path.resolve(".");
   const ctx = await chromium.launchPersistentContext("", {
     channel: "chromium",
     headless: true,
@@ -23,7 +23,7 @@ test.describe("PDFE extension", () => {
     const { ctx, extensionId } = await launchExtension();
     const fileUrl = pathToFileURL(path.resolve("tests/fixtures/digital.pdf")).href;
     const page = await ctx.newPage();
-    await page.goto(`chrome-extension://${extensionId}/viewer.html?file=${encodeURIComponent(fileUrl)}`);
+    await page.goto(`chrome-extension://${extensionId}/dist/viewer.html?file=${encodeURIComponent(fileUrl)}`);
     await expect(page.locator(".textLayer span").first()).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("#pageInfo")).toHaveText("1 / 1");
     await ctx.close();
