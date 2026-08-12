@@ -1,4 +1,4 @@
-import { TextLayer, type PageViewport } from "pdfjs-dist";
+import { TextLayer } from "pdfjs-dist";
 import type { PDFPageProxy } from "pdfjs-dist";
 import type { TextSpan } from "../shared/types";
 
@@ -38,9 +38,7 @@ export async function renderPage(
   const spans: TextSpan[] = [];
   for (const item of textContent.items) {
     const s = item as any;
-    if (typeof s.str === "string" && s.str.trim()) {
-      spans.push({ text: s.str, bbox: s.transform ? undefined : undefined, confidence: undefined });
-    }
+    spans.push({ text: typeof s.str === "string" ? s.str.trim() : "", bbox: undefined, confidence: undefined });
   }
   return { textSpans: spans, canvas };
 }

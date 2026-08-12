@@ -31,4 +31,24 @@ describe("renderPage", () => {
     expect(result.textSpans.length).toBe(1);
     expect(result.textSpans[0].text).toBe("merhaba");
   });
+
+  it("keeps whitespace-only items so textSpans align 1:1 with the DOM textLayer spans", async () => {
+    const { renderPage } = await import("../../src/viewer/pageRenderer");
+    const page = mockPage();
+    (page.getTextContent as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      styles: { f1: { fontFamily: "sans-serif", ascent: 0.75, descent: 0, vertical: false } },
+      items: [
+        { type: "text", fontName: "f1", str: "", dir: "ltr", width: 0, height: 0, transform: [1, 0, 0, 1, 0, 0], hasEOL: false },
+        { type: "text", fontName: "f1", str: "merhaba", dir: "ltr", width: 10, height: 10, transform: [1, 0, 0, 1, 0, 0], hasEOL: false },
+        { type: "text", fontName: "f1", str: "   ", dir: "ltr", width: 3, height: 3, transform: [1, 0, 0, 1, 0, 0], hasEOL: false },
+      ],
+    });
+    const canvas = document.createElement("canvas");
+    const container = document.createElement("div");
+    const result = await renderPage(page, canvas, container, 1);
+    expect(result.textSpans.length).toBe(3);
+    expect(result.textSpans[0].text).toBe("");
+    expect(result.textSpans[1].text).toBe("merhaba");
+    expect(result.textSpans[2].text).toBe("");
+  });
 });
