@@ -1,0 +1,121 @@
+﻿# Review package: fb5f68ee853dfa28242c18fcc1ec3dfd42e34277..HEAD
+
+## Commits
+6abe9f8 fix: correct spanIndex mapping for multi-page highlighting
+
+## Files changed
+ src/viewer/findBar.ts        |  8 ++++++--
+ tests/unit/findBar.test.ts   | 15 +++++++++++++++
+ tests/unit/highlight.test.ts | 30 +++++++++++++++++++++++++++++-
+ 3 files changed, 50 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/src/viewer/findBar.ts b/src/viewer/findBar.ts
+index 3ca2cf2..480c28e 100644
+--- a/src/viewer/findBar.ts
++++ b/src/viewer/findBar.ts
+@@ -11,19 +11,23 @@ interface FindableSpan {
+ 
+ export function findInSpans(
+   spans: FindableSpan[],
+   query: string,
+   regex = false
+ ): FindResult[] {
+   if (!query) return [];
+   const results: FindResult[] = [];
+   try {
+     const re = regex ? new RegExp(query, "gi") : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+-    spans.forEach((span, idx) => {
++    const pageCounts = new Map<number, number>();
++    spans.forEach((span) => {
+       re.lastIndex = 0;
+-      if (re.test(span.text)) results.push({ pageNumber: span.pageNumber ?? -1, spanIndex: idx, text: span.text });
++      const pageNumber = span.pageNumber ?? -1;
++      const spanIndex = pageCounts.get(pageNumber) ?? 0;
++      pageCounts.set(pageNumber, spanIndex + 1);
++      if (re.test(span.text)) results.push({ pageNumber, spanIndex, text: span.text });
+     });
+   } catch {
+     return [];
+   }
+   return results;
+ }
+\ No newline at end of file
+diff --git a/tests/unit/findBar.test.ts b/tests/unit/findBar.test.ts
+index 4f54fc8..08e2190 100644
+--- a/tests/unit/findBar.test.ts
++++ b/tests/unit/findBar.test.ts
+@@ -10,11 +10,26 @@ describe("findInSpans", () => {
+   it("supports regex when flag is set", () => {
+     const r = findInSpans(spans, "Tutar[^\\d]*(\\d+)", true);
+     expect(r.length).toBe(1);
+   });
+   it("returns empty for empty query", () => {
+     expect(findInSpans(spans, "")).toEqual([]);
+   });
+   it("treats invalid regex as no results", () => {
+     expect(findInSpans(spans, "(", true)).toEqual([]);
+   });
++  it("returns page-local spanIndexes across multiple pages", () => {
++    const multiPage = [
++      { text: "one", pageNumber: 1 },
++      { text: "two", pageNumber: 1 },
++      { text: "needle", pageNumber: 1 },
++      { text: "three", pageNumber: 2 },
++      { text: "needle", pageNumber: 2 },
++      { text: "four", pageNumber: 2 },
++    ];
++    const r = findInSpans(multiPage, "needle");
++    expect(r).toEqual([
++      { pageNumber: 1, spanIndex: 2, text: "needle" },
++      { pageNumber: 2, spanIndex: 1, text: "needle" },
++    ]);
++  });
+ });
+\ No newline at end of file
+diff --git a/tests/unit/highlight.test.ts b/tests/unit/highlight.test.ts
+index 6355d87..8498d15 100644
+--- a/tests/unit/highlight.test.ts
++++ b/tests/unit/highlight.test.ts
+@@ -1,11 +1,39 @@
+ import { describe, expect, it } from "vitest";
+-import { searchResultsToRefs } from "../../src/viewer/highlight";
++import { searchResultsToRefs, highlightSpans } from "../../src/viewer/highlight";
++import { findInSpans } from "../../src/viewer/findBar";
+ 
+ describe("highlight", () => {
+   it("converts search results to refs", () => {
+     const refs = searchResultsToRefs([
+       { pageNumber: 2, spanIndex: 3, span: { text: "x" }, score: 0.5, kind: "semantic" },
+     ]);
+     expect(refs).toEqual([{ pageNumber: 2, spanIndex: 3 }]);
+   });
++  it("highlights the correct span on page 2 from flattened find results", () => {
++    const pageSpans = [["a", "b", "needle", "d"], ["e", "needle", "f"]];
++    const containers = pageSpans.map((spans) => {
++      const page = document.createElement("div");
++      const layer = document.createElement("div");
++      layer.className = "textLayer";
++      page.appendChild(layer);
++      for (const t of spans) {
++        const span = document.createElement("span");
++        span.textContent = t;
++        layer.appendChild(span);
++      }
++      return page;
++    });
++    const flattened = containers.flatMap((page, i) =>
++      [...page.querySelectorAll(".textLayer span")].map((s) => ({ text: s.textContent!, pageNumber: i + 1 }))
++    );
++    const results = findInSpans(flattened, "needle");
++    const count = highlightSpans(
++      containers,
++      results.map((r) => ({ pageNumber: r.pageNumber, spanIndex: r.spanIndex }))
++    );
++    expect(count).toBe(2);
++    expect(containers[0].querySelectorAll(".textLayer span")[2].classList.contains("pdfe-highlight")).toBe(true);
++    expect(containers[1].querySelectorAll(".textLayer span")[1].classList.contains("pdfe-highlight")).toBe(true);
++    expect(containers[1].querySelectorAll(".textLayer span")[0].classList.contains("pdfe-highlight")).toBe(false);
++  });
+ });
+\ No newline at end of file

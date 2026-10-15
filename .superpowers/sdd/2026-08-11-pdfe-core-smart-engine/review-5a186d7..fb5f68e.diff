@@ -1,0 +1,191 @@
+﻿# Review package: 5a186d7a5041070dbc305d2d15a88b922d16cb04..HEAD
+
+## Commits
+fb5f68e feat: add search highlighting and smart panel scaffold
+
+## Files changed
+ src/viewer/highlight.ts      | 25 +++++++++++++++++++++++++
+ src/viewer/smartPanel.ts     | 25 +++++++++++++++++++++++++
+ src/viewer/viewer.css        |  7 +++++++
+ src/viewer/viewer.ts         | 12 +++++++++++-
+ tests/unit/highlight.test.ts | 11 +++++++++++
+ 5 files changed, 79 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/src/viewer/highlight.ts b/src/viewer/highlight.ts
+new file mode 100644
+index 0000000..be54bab
+--- /dev/null
++++ b/src/viewer/highlight.ts
+@@ -0,0 +1,25 @@
++import type { SearchResult } from "../shared/types";
++
++export interface TextSpanRef {
++  pageNumber: number;
++  spanIndex: number;
++}
++
++export function highlightSpans(containers: HTMLElement[], refs: TextSpanRef[]): number {
++  for (const el of containers) el.classList.remove("pdfe-highlight");
++  const pageEls = containers.map((el) => el.querySelectorAll(".textLayer span"));
++  let count = 0;
++  for (const ref of refs) {
++    const spans = pageEls[ref.pageNumber - 1];
++    const span = spans?.[ref.spanIndex] as HTMLElement | undefined;
++    if (span) {
++      span.classList.add("pdfe-highlight");
++      count++;
++    }
++  }
++  return count;
++}
++
++export function searchResultsToRefs(results: SearchResult[]): TextSpanRef[] {
++  return results.map((r) => ({ pageNumber: r.pageNumber, spanIndex: r.spanIndex }));
++}
+\ No newline at end of file
+diff --git a/src/viewer/smartPanel.ts b/src/viewer/smartPanel.ts
+new file mode 100644
+index 0000000..4878654
+--- /dev/null
++++ b/src/viewer/smartPanel.ts
+@@ -0,0 +1,25 @@
++export function createSmartPanel(): HTMLElement {
++  const panel = document.createElement("aside");
++  panel.id = "smartPanel";
++  panel.innerHTML = `
++    <nav>
++      <button data-tab="ocr" class="active">OCR</button>
++      <button data-tab="search">Akıllı Arama</button>
++      <button data-tab="summary">Özet</button>
++      <button data-tab="extract">Veri</button>
++    </nav>
++    <section id="tab-ocr"></section>
++    <section id="tab-search" hidden></section>
++    <section id="tab-summary" hidden></section>
++    <section id="tab-extract" hidden></section>
++  `;
++  panel.querySelectorAll<HTMLButtonElement>("nav button").forEach((btn) => {
++    btn.onclick = () => {
++      panel.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
++      btn.classList.add("active");
++      panel.querySelectorAll("section").forEach((s) => (s.hidden = true));
++      panel.querySelector<HTMLElement>(`#tab-${btn.dataset.tab}`)!.hidden = false;
++    };
++  });
++  return panel;
++}
+\ No newline at end of file
+diff --git a/src/viewer/viewer.css b/src/viewer/viewer.css
+index ce570f1..8090380 100644
+--- a/src/viewer/viewer.css
++++ b/src/viewer/viewer.css
+@@ -1,9 +1,16 @@
+ * { box-sizing: border-box; }
+ html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #2b2b2b; color: #eee; }
+ #app { display: flex; flex-direction: column; height: 100vh; }
+ #toolbar { display: flex; gap: 8px; align-items: center; padding: 8px; background: #1f1f1f; }
+ #pages { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+ .page-container { position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+ .textLayer { position: absolute; inset: 0; overflow: hidden; opacity: .25; line-height: 1; text-align: initial; transform-origin: 0 0; }
+ .textLayer span { position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+ .textLayer ::selection { background: rgba(0, 122, 255, .6); }
++.textLayer span.pdfe-highlight { background: rgba(255, 200, 0, .5); }
++#smartPanel { position: fixed; top: 48px; right: 0; bottom: 0; width: 340px; background: #1f1f1f; border-left: 1px solid #444; transform: translateX(100%); transition: transform .2s; display: flex; flex-direction: column; z-index: 10; }
++#smartPanel.open { transform: translateX(0); }
++#smartPanel nav { display: flex; }
++#smartPanel nav button { flex: 1; padding: 8px; background: none; color: #ccc; border: none; cursor: pointer; }
++#smartPanel nav button.active { background: #333; color: #fff; }
++#smartPanel section { padding: 12px; overflow: auto; flex: 1; }
+diff --git a/src/viewer/viewer.ts b/src/viewer/viewer.ts
+index 6728ed0..c09d0cc 100644
+--- a/src/viewer/viewer.ts
++++ b/src/viewer/viewer.ts
+@@ -1,58 +1,68 @@
+ import "./viewer.css";
+ import { loadDocument } from "./pdfLoader";
+ import { renderPage, type RenderedPage } from "./pageRenderer";
+ import { createToolbar, updatePageInfo } from "./toolbar";
+ import { findInSpans, type FindResult } from "./findBar";
++import { highlightSpans } from "./highlight";
++import { createSmartPanel } from "./smartPanel";
+ 
+ const renderedPages: RenderedPage[] = [];
++const renderedLayers: HTMLElement[] = [];
+ let currentPage = 1;
+ let scale = 1.25;
+ let pdf: import("pdfjs-dist").PDFDocumentProxy;
+ 
+ async function renderAll(): Promise<void> {
+   const pages = document.getElementById("pages")!;
+   pages.innerHTML = "";
+   renderedPages.length = 0;
++  renderedLayers.length = 0;
+   for (let i = 1; i <= pdf.numPages; i++) {
+     const page = await pdf.getPage(i);
+     const container = document.createElement("div");
+     container.className = "page-container";
+     pages.appendChild(container);
+     const canvas = document.createElement("canvas");
+     container.appendChild(canvas);
+     renderedPages.push(await renderPage(page, canvas, container, scale));
++    renderedLayers.push(container.querySelector(".textLayer")!);
+     page.cleanup();
+   }
+   updatePageInfo(document.getElementById("pageInfo")!, currentPage, pdf.numPages);
+ }
+ 
+ function scrollToPage(n: number): void {
+   const pages = document.getElementById("pages")!;
+   const target = pages.children[n - 1] as HTMLElement | undefined;
+   target?.scrollIntoView({ behavior: "smooth", block: "start" });
+ }
+ 
+ async function init(): Promise<void> {
+   const file = getFileParam();
+   const app = document.getElementById("app")!;
+   app.appendChild(
+     createToolbar({
+       onNavigate: (delta) => { const n = Math.min(Math.max(currentPage + delta, 1), pdf.numPages); currentPage = n; scrollToPage(n); },
+       onZoom: async (f) => { scale = Math.min(Math.max(scale * f, 0.5), 4); await renderAll(); scrollToPage(currentPage); },
+-      onFind: (q) => { const results = findInSpans(renderedPages.flatMap((r, i) => r.textSpans.map((s) => ({ ...s, pageNumber: i + 1 }))), q); },
++      onFind: (q) => {
++        const results = findInSpans(renderedPages.flatMap((r, i) => r.textSpans.map((s) => ({ ...s, pageNumber: i + 1 }))), q);
++        const refs = results.map((r) => ({ pageNumber: r.pageNumber, spanIndex: r.spanIndex }));
++        highlightSpans(renderedLayers, refs);
++      },
+       onToggleSmartPanel: () => { document.getElementById("smartPanel")?.classList.toggle("open"); },
+     })
+   );
+   const pages = document.createElement("div");
+   pages.id = "pages";
+   app.appendChild(pages);
++  app.appendChild(createSmartPanel());
+ 
+   pdf = await loadDocument(file);
+   const title = document.getElementById("title");
+   if (title) title.textContent = file.split("/").pop() || file;
+   await renderAll();
+ }
+ 
+ function getFileParam(): string {
+   const url = new URL(location.href);
+   const file = url.searchParams.get("file");
+diff --git a/tests/unit/highlight.test.ts b/tests/unit/highlight.test.ts
+new file mode 100644
+index 0000000..6355d87
+--- /dev/null
++++ b/tests/unit/highlight.test.ts
+@@ -0,0 +1,11 @@
++import { describe, expect, it } from "vitest";
++import { searchResultsToRefs } from "../../src/viewer/highlight";
++
++describe("highlight", () => {
++  it("converts search results to refs", () => {
++    const refs = searchResultsToRefs([
++      { pageNumber: 2, spanIndex: 3, span: { text: "x" }, score: 0.5, kind: "semantic" },
++    ]);
++    expect(refs).toEqual([{ pageNumber: 2, spanIndex: 3 }]);
++  });
++});
+\ No newline at end of file

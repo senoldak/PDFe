@@ -1,0 +1,147 @@
+﻿# Review package: 4eba61cc1f36ec15714dcc4d123c7927cca8871e..HEAD
+
+## Commits
+063f383 feat: add local summarization with map-reduce chunking
+
+## Files changed
+ src/engine/summarize/summarizer.ts | 35 +++++++++++++++++++++++++++++++++++
+ src/viewer/smartPanel.ts           | 13 ++++++++++++-
+ tests/unit/summarizer.test.ts      | 20 ++++++++++++++++++++
+ 3 files changed, 67 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/src/engine/summarize/summarizer.ts b/src/engine/summarize/summarizer.ts
+new file mode 100644
+index 0000000..deb9de4
+--- /dev/null
++++ b/src/engine/summarize/summarizer.ts
+@@ -0,0 +1,35 @@
++import { pipeline } from "@huggingface/transformers";
++
++const MODEL = "Xenova/distilbart-cnn-6-6";
++type SummarizationPipeline = (text: string, opts: { max_length: number; min_length: number }) => Promise<{ summary_text: string }[]>;
++
++const CHUNK_WORDS = 800;
++
++function chunkText(text: string, maxWords: number): string[] {
++  const words = text.split(/\s+/).filter(Boolean);
++  const chunks: string[] = [];
++  for (let i = 0; i < words.length; i += maxWords) {
++    chunks.push(words.slice(i, i + maxWords).join(" "));
++  }
++  return chunks;
++}
++
++export class Summarizer {
++  private pipe: SummarizationPipeline | null = null;
++
++  async init(): Promise<void> {
++    this.pipe = (await pipeline("summarization", MODEL)) as unknown as SummarizationPipeline;
++  }
++
++  async summarize(text: string, maxLength = 120): Promise<string> {
++    if (!this.pipe) throw new Error("Summarizer not initialized");
++    const chunks = chunkText(text, CHUNK_WORDS);
++    if (chunks.length === 0) return "";
++    const parts: string[] = [];
++    for (const c of chunks) {
++      const [out] = await this.pipe(c, { max_length: Math.min(maxLength, 200), min_length: 20 });
++      parts.push(out.summary_text);
++    }
++    return parts.length === 1 ? parts[0] : parts.join(" ");
++  }
++}
+\ No newline at end of file
+diff --git a/src/viewer/smartPanel.ts b/src/viewer/smartPanel.ts
+index 80a10a0..0ed665b 100644
+--- a/src/viewer/smartPanel.ts
++++ b/src/viewer/smartPanel.ts
+@@ -1,16 +1,19 @@
+-import type { EngineState, SearchResult } from "../shared/types";
++import type { DocumentCorpus, EngineState, SearchResult } from "../shared/types";
+ import type { EnginePipeline } from "../engine/pipeline";
++import type { Summarizer } from "../engine/summarize/summarizer";
+ 
+ export interface SmartPanelCallbacks {
+   pipeline: EnginePipeline;
+   onHighlight: (result: SearchResult) => void;
++  summarizer?: Summarizer;
++  getCorpus?: () => DocumentCorpus | null;
+ }
+ 
+ export function createSmartPanel(): HTMLElement {
+   const panel = document.createElement("aside");
+   panel.id = "smartPanel";
+   panel.innerHTML = `
+     <nav>
+       <button data-tab="ocr" class="active">OCR</button>
+       <button data-tab="search">Akıllı Arama</button>
+       <button data-tab="summary">Özet</button>
+@@ -43,32 +46,40 @@ export function createSmartPanel(): HTMLElement {
+   });
+   return panel;
+ }
+ 
+ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { setState(s: EngineState): void } {
+   const status = panel.querySelector<HTMLElement>("#ocrStatus")!;
+   const progressWrap = panel.querySelector<HTMLElement>("#ocrProgressWrap")!;
+   const progress = panel.querySelector<HTMLProgressElement>("#ocrProgress")!;
+   const input = panel.querySelector<HTMLInputElement>("#semanticInput")!;
+   const resultsEl = panel.querySelector<HTMLElement>("#searchResults")!;
++  const summarizeBtn = panel.querySelector<HTMLButtonElement>("#summarizeBtn")!;
++  const summaryOutput = panel.querySelector<HTMLElement>("#summaryOutput")!;
+ 
+   let timer: ReturnType<typeof setTimeout> | undefined;
+   input.addEventListener("input", () => {
+     clearTimeout(timer);
+     const q = input.value.trim();
+     if (q.length < 2) return;
+     timer = setTimeout(async () => {
+       const results = await cb.pipeline.search(q);
+       renderResults(results);
+     }, 300);
+   });
+ 
++  summarizeBtn.addEventListener("click", async () => {
++    const corpus = cb.getCorpus?.() ?? null;
++    if (!cb.summarizer || !corpus) return;
++    summaryOutput.textContent = await cb.summarizer.summarize(corpus.fullText);
++  });
++
+   function renderResults(results: SearchResult[]): void {
+     resultsEl.innerHTML = "";
+     for (const r of results) {
+       const li = document.createElement("li");
+       li.textContent = `${r.pageNumber}. sayfa — ${r.span.text.slice(0, 60)}`;
+       li.onclick = () => cb.onHighlight(r);
+       resultsEl.appendChild(li);
+     }
+   }
+ 
+diff --git a/tests/unit/summarizer.test.ts b/tests/unit/summarizer.test.ts
+new file mode 100644
+index 0000000..5c0c410
+--- /dev/null
++++ b/tests/unit/summarizer.test.ts
+@@ -0,0 +1,20 @@
++import { describe, expect, it, vi } from "vitest";
++import { Summarizer } from "../../src/engine/summarize/summarizer";
++
++vi.mock("@huggingface/transformers", () => {
++  const pipe = vi.fn(async (_t: string) => [{ summary_text: "özet çıktısı" }]);
++  return { pipeline: vi.fn().mockResolvedValue(pipe) };
++});
++
++describe("Summarizer", () => {
++  it("returns summary for short text", async () => {
++    const s = new Summarizer();
++    await s.init();
++    expect(await s.summarize("bu bir faturanın uzun metnidir")).toBe("özet çıktısı");
++  });
++  it("returns empty for empty text", async () => {
++    const s = new Summarizer();
++    await s.init();
++    expect(await s.summarize("   ")).toBe("");
++  });
++});
+\ No newline at end of file

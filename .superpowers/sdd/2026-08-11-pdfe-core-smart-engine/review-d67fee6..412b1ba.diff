@@ -1,0 +1,91 @@
+﻿# Review package: d67fee6088452becfa00c9dc18a4d7f3f9e35af5..HEAD
+
+## Commits
+412b1ba fix: point OCR language path at packaged tessdata
+
+## Files changed
+ src/engine/ocr/ocr.ts | 2 ++
+ src/viewer/viewer.ts  | 5 +++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/engine/ocr/ocr.ts b/src/engine/ocr/ocr.ts
+index c2c7751..3ddc0f2 100644
+--- a/src/engine/ocr/ocr.ts
++++ b/src/engine/ocr/ocr.ts
+@@ -1,38 +1,40 @@
+ import { createWorker, type Worker } from "tesseract.js";
+ import type { Bbox, PageText, TextSpan } from "../../shared/types";
+ 
+ export interface OcrOptions {
+   langPath: string;
+   corePath: string;
+   workerPath: string;
+   lang: string;
++  gzip?: boolean;
+ }
+ 
+ export class OcrEngine {
+   private worker: Worker | null = null;
+   private progressCb: ((p: number) => void) | null = null;
+   private options: OcrOptions;
+ 
+   constructor(options: OcrOptions) {
+     this.options = options;
+   }
+ 
+   setProgress(cb: (p: number) => void): void {
+     this.progressCb = cb;
+   }
+ 
+   async init(): Promise<void> {
+     this.worker = await createWorker(this.options.lang, 1, {
+       langPath: this.options.langPath,
+       corePath: this.options.corePath,
+       workerPath: this.options.workerPath,
++      gzip: this.options.gzip ?? false,
+       logger: (m) => {
+         if (m.status === "recognizing text" && this.progressCb) {
+           this.progressCb(m.progress);
+         }
+       },
+     });
+   }
+ 
+   async recognizePage(canvas: HTMLCanvasElement, pageNumber: number): Promise<PageText> {
+     if (!this.worker) throw new Error("OcrEngine not initialized");
+diff --git a/src/viewer/viewer.ts b/src/viewer/viewer.ts
+index dc2e81a..9bb91e1 100644
+--- a/src/viewer/viewer.ts
++++ b/src/viewer/viewer.ts
+@@ -60,27 +60,28 @@ async function init(): Promise<void> {
+   );
+   const pages = document.createElement("div");
+   pages.id = "pages";
+   app.appendChild(pages);
+ 
+   const panel = createSmartPanel();
+   app.appendChild(panel);
+ 
+   const pipeline = new EnginePipeline({
+     ocr: new OcrEngine({
+-      langPath: chrome.runtime.getURL("tesseract/"),
++      langPath: chrome.runtime.getURL("models/tessdata/"),
+       corePath: chrome.runtime.getURL("tesseract-core/"),
+       workerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
+       lang: "tur",
++      gzip: false,
+     }),
+     semantic: new SemanticSearch(),
+-    ocrLangPath: chrome.runtime.getURL("tesseract/"),
++    ocrLangPath: chrome.runtime.getURL("models/tessdata/"),
+     ocrCorePath: chrome.runtime.getURL("tesseract-core/"),
+     ocrWorkerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
+   });
+   const panelApi = bindSmartPanel(panel, {
+     pipeline,
+     onHighlight: (r) => {
+       highlightSpans(renderedLayers, [{ pageNumber: r.pageNumber, spanIndex: r.spanIndex }]);
+       scrollToPage(r.pageNumber);
+     },
+   });

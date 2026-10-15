@@ -1,0 +1,344 @@
+﻿# Review package: b6ae53abe15a62762dd113bd23abfbb56cfcb273..HEAD
+
+## Commits
+d67fee6 feat: bundle models for offline use with fetch script
+
+## Files changed
+ .gitignore                       |   5 ++
+ docs/MODEL_LICENSES.md           |  24 ++++++++
+ package.json                     |   3 +-
+ public/models/README.md          |  24 +++++++-
+ public/models/tessdata/README.md |  13 ++++
+ scripts/fetch-models.mjs         | 128 +++++++++++++++++++++++++++++++++++++++
+ src/engine/runtime.ts            |  10 +++
+ src/viewer/viewer.ts             |   2 +
+ 8 files changed, 206 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/.gitignore b/.gitignore
+index f0a232b..be40639 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,4 +1,9 @@
+ node_modules/
+ dist/
+ test-results/
+ playwright-report/
++
++# Model binary assets (indirilir: npm run fetch:models)
++public/models/onnx/
++public/models/ort/
++public/models/tessdata/*.traineddata
+diff --git a/docs/MODEL_LICENSES.md b/docs/MODEL_LICENSES.md
+new file mode 100644
+index 0000000..d432e95
+--- /dev/null
++++ b/docs/MODEL_LICENSES.md
+@@ -0,0 +1,24 @@
++# Kullanılan Model ve Kaynak Lisansları
++
++PDFE eklentisi tüm model ve dil dosyalarını paket içinde gömülü olarak kullanır;
++çalışma zamanında hiçbir dış kaynaktan dosya indirilmez. Aşağıda kullanılan tüm
++model/kaynak dosyaları ve lisansları listelenmiştir.
++
++| Kaynak | Kullanım | Kaynak Adresi | Lisans |
++| --- | --- | --- | --- |
++| Tesseract traineddata — `tur.traineddata`, `eng.traineddata` | OCR dil verileri | https://github.com/tesseract-ocr/tessdata | Apache-2.0 |
++| `Xenova/all-MiniLM-L6-v2` (ONNX: `model_quantized.onnx` + config/tokenizer) | Anlamsal arama gömme vektörleri | https://huggingface.co/Xenova/all-MiniLM-L6-v2 | Apache-2.0 (hnswlib/src: `sentence-transformers` çıktısı) |
++| `Xenova/distilbart-cnn-6-6` (ONNX: `encoder_model_quantized.onnx`, `decoder_model_merged_quantized.onnx` + config/tokenizer) | Yerel özetleme | https://huggingface.co/Xenova/distilbart-cnn-6-6 | Apache-2.0 (kaynak: `facebook/distilbart-cnn-6-6`, Apache-2.0) |
++| onnxruntime-web (`ort-wasm-simd-threaded.jsep.mjs/.wasm`) | ONNX model çalıştırma motoru | https://github.com/microsoft/onnxruntime | MIT |
++| `@huggingface/transformers` (çalışma zamanı bağımlılığı) | Transformers.js API | https://github.com/huggingface/transformers.js | Apache-2.0 |
++
++Not: `tessdata` deposundaki traineddata dosyaları Apache License 2.0 ile lisanslıdır
++([tessdata/LICENSE](https://github.com/tesseract-ocr/tessdata/blob/main/LICENSE)).
++
++## Eklenti Politikası
++
++- `fetch-models.mjs` betiği bu lisanslı dosyaları indirir ve `public/models/` altına yerleştirir.
++- Büyük ikili dosyalar (`.traineddata`, `.onnx`, `.wasm`) git ile sürümlenmez; temiz bir
++  ortamda `npm install && npm run fetch:models && npm run build` yeterlidir.
++- Adil kullanım: indirme işlemleri Tesseract ve Hugging Face tarafından sağlanan resmi
++  kaynaklardan yapılır.
+\ No newline at end of file
+diff --git a/package.json b/package.json
+index 3fbdace..9853c44 100644
+--- a/package.json
++++ b/package.json
+@@ -1,21 +1,22 @@
+ {
+   "name": "pdfe",
+   "private": true,
+   "version": "0.1.0",
+   "type": "module",
+   "scripts": {
+     "build": "vite build && node scripts/copy-static.mjs",
+     "dev": "vite build --watch",
+     "test": "vitest run",
+     "test:e2e": "playwright test",
+-    "typecheck": "tsc --noEmit"
++    "typecheck": "tsc --noEmit",
++    "fetch:models": "node scripts/fetch-models.mjs"
+   },
+   "devDependencies": {
+     "@playwright/test": "^1.49.0",
+     "@types/chrome": "^0.0.280",
+     "jsdom": "^29.1.1",
+     "typescript": "^5.6.0",
+     "vite": "^6.0.0",
+     "vitest": "^2.1.0"
+   },
+   "dependencies": {
+diff --git a/public/models/README.md b/public/models/README.md
+index 1bd7d4b..3477aa0 100644
+--- a/public/models/README.md
++++ b/public/models/README.md
+@@ -1,10 +1,30 @@
+ # PDFE Model Dosyaları
+ 
+ Bu dizin, Akıllı Motor'un kullandığı model dosyalarını barındırır. Tüm modeller
+ eklentiyle birlikte gömülüdür; çalışma zamanında hiçbir şey indirilmez ve hiçbir
+ içerik cihazdan dışarı çıkmaz.
+ 
++## Yapı
++
+ - `tessdata/` — OCR dil verileri (`tur`, `eng` Tesseract traineddata)
+-- `onnx/` — anlamsal arama (embedding) ve özetleme ONNX modelleri
++- `onnx/Xenova/all-MiniLM-L6-v2/` — anlamsal arama (embedding) ONNX modeli + config/tokenizer
++- `onnx/Xenova/distilbart-cnn-6-6/` — özetleme ONNX modelleri (encoder + decoder) + config/tokenizer
++- `ort/` — onnxruntime-web WASM dosyaları (`ort-wasm-simd-threaded.jsep.mjs/.wasm`)
++
++## Kurulum
++
++İkili dosyalar git'te sürümlenmez; temiz bir ortamda indirmek için:
++
++```bash
++npm run fetch:models
++```
++
++Bu komut model, tokenizer, config ve traineddata dosyalarını resmi kaynaklardan
++indirir, onnxruntime WASM dosyalarını `node_modules`'dan kopyalar. Ardından normal
++derleme yapılır:
++
++```bash
++npm run build
++```
+ 
+-Model dosyalarının lisans bilgileri `docs/` klasöründe belgelenir.
++Model dosyalarının lisans bilgileri `docs/MODEL_LICENSES.md` klasöründe belgelenir.
+diff --git a/public/models/tessdata/README.md b/public/models/tessdata/README.md
+new file mode 100644
+index 0000000..9574a3d
+--- /dev/null
++++ b/public/models/tessdata/README.md
+@@ -0,0 +1,13 @@
++# Tesseract traineddata
++
++Bu dizin OCR için gerekli dil verilerini içerir.
++
++- `tur.traineddata` — Türkçe OCR
++- `eng.traineddata` — İngilizce OCR
++
++Dosyalar `npm run fetch:models` çalıştırıldığında
++`https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/<dil>.traineddata`
++adresinden indirilir (tessdata deposu, Apache-2.0 lisansı). Kaynak:
++https://github.com/tesseract-ocr/tessdata
++
++Lisans ayrıntıları için: `docs/MODEL_LICENSES.md`
+\ No newline at end of file
+diff --git a/scripts/fetch-models.mjs b/scripts/fetch-models.mjs
+new file mode 100644
+index 0000000..9507bab
+--- /dev/null
++++ b/scripts/fetch-models.mjs
+@@ -0,0 +1,128 @@
++import { mkdirSync, existsSync, copyFileSync, createWriteStream, renameSync, rmSync, statSync } from "node:fs";
++import { resolve, dirname, relative } from "node:path";
++import { fileURLToPath } from "node:url";
++import { Readable } from "node:stream";
++import { pipeline as streamPipeline } from "node:stream/promises";
++
++const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
++const dest = resolve(root, "public/models");
++mkdirSync(dest, { recursive: true });
++
++const HF = "https://huggingface.co";
++
++const REPOS = {
++  "Xenova/all-MiniLM-L6-v2": [
++    "config.json",
++    "tokenizer.json",
++    "tokenizer_config.json",
++    "special_tokens_map.json",
++    "vocab.txt",
++    "onnx/model_quantized.onnx",
++  ],
++  "Xenova/distilbart-cnn-6-6": [
++    "config.json",
++    "generation_config.json",
++    "tokenizer.json",
++    "tokenizer_config.json",
++    "special_tokens_map.json",
++    "vocab.json",
++    "merges.txt",
++    "onnx/encoder_model_quantized.onnx",
++    "onnx/decoder_model_merged_quantized.onnx",
++  ],
++};
++
++const jobs = [];
++for (const [repo, files] of Object.entries(REPOS)) {
++  for (const file of files) {
++    jobs.push({
++      url: `${HF}/${repo}/resolve/main/${file}`,
++      out: resolve(dest, "onnx", repo, file),
++    });
++  }
++}
++for (const lang of ["tur", "eng"]) {
++  jobs.push({
++    url: `https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/${lang}.traineddata`,
++    out: resolve(dest, "tessdata", `${lang}.traineddata`),
++  });
++}
++
++const RETRIES = 4;
++const CONCURRENCY = 3;
++
++async function download(job, label) {
++  if (existsSync(job.out)) {
++    console.log("skip", label);
++    return;
++  }
++  mkdirSync(dirname(job.out), { recursive: true });
++  let lastErr;
++  for (let attempt = 1; attempt <= RETRIES; attempt++) {
++    const tmp = job.out + ".part";
++    try {
++      const res = await fetch(job.url);
++      if (!res.ok) throw new Error(`HTTP ${res.status}`);
++      if (!res.body) throw new Error("no response body");
++      await streamPipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
++      const len = statSync(tmp).size;
++      if (len === 0) throw new Error("empty response");
++      renameSync(tmp, job.out);
++      console.log("saved", label, `(${len} bytes)`);
++      return;
++    } catch (e) {
++      lastErr = e;
++      console.log(`retry ${attempt}/${RETRIES} ${label}: ${e.message}`);
++      try { rmSync(tmp, { force: true }); } catch {}
++      await new Promise((r) => setTimeout(r, 1500 * attempt));
++    }
++  }
++  throw lastErr;
++}
++
++async function runPool(items, worker, limit) {
++  const results = [];
++  let i = 0;
++  const runner = async () => {
++    while (i < items.length) {
++      const idx = i++;
++      results.push(await worker(items[idx]));
++    }
++  };
++  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner));
++  return results;
++}
++
++const failures = [];
++await runPool(
++  jobs,
++  async (job) => {
++    const label = relative(dest, job.out);
++    try {
++      await download(job, label);
++    } catch (e) {
++      failures.push({ label, error: e.message });
++      console.log("FAILED", label, e.message);
++    }
++  },
++  CONCURRENCY
++);
++
++const ortDir = resolve(dest, "ort");
++mkdirSync(ortDir, { recursive: true });
++const tDist = resolve(root, "node_modules/@huggingface/transformers/dist");
++for (const f of ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"]) {
++  const src = resolve(tDist, f);
++  if (existsSync(src)) {
++    copyFileSync(src, resolve(ortDir, f));
++    console.log("copied", f, "from node_modules");
++  } else {
++    console.log("WARN missing in node_modules:", f);
++  }
++}
++
++if (failures.length) {
++  console.error(`\n${failures.length} download(s) failed:`);
++  for (const f of failures) console.error(`  - ${f.label}: ${f.error}`);
++  process.exit(1);
++}
+\ No newline at end of file
+diff --git a/src/engine/runtime.ts b/src/engine/runtime.ts
+new file mode 100644
+index 0000000..90b6b1c
+--- /dev/null
++++ b/src/engine/runtime.ts
+@@ -0,0 +1,10 @@
++import { env } from "@huggingface/transformers";
++
++export function configureRuntime(): void {
++  env.allowLocalModels = true;
++  env.allowRemoteModels = false;
++  env.localModelPath = chrome.runtime.getURL("models/onnx/");
++  const onnx = env.backends.onnx as { wasm?: { wasmPaths?: string } };
++  onnx.wasm = onnx.wasm ?? {};
++  onnx.wasm.wasmPaths = chrome.runtime.getURL("models/ort/");
++}
+\ No newline at end of file
+diff --git a/src/viewer/viewer.ts b/src/viewer/viewer.ts
+index 35f390a..dc2e81a 100644
+--- a/src/viewer/viewer.ts
++++ b/src/viewer/viewer.ts
+@@ -1,17 +1,18 @@
+ import "./viewer.css";
+ import { loadDocument } from "./pdfLoader";
+ import { renderPage, type RenderedPage } from "./pageRenderer";
+ import { createToolbar, updatePageInfo } from "./toolbar";
+ import { findInSpans, type FindResult } from "./findBar";
+ import { highlightSpans } from "./highlight";
+ import { createSmartPanel, bindSmartPanel } from "./smartPanel";
++import { configureRuntime } from "../engine/runtime";
+ import { EnginePipeline } from "../engine/pipeline";
+ import { OcrEngine } from "../engine/ocr/ocr";
+ import { SemanticSearch } from "../engine/search/semantic";
+ import type { PDFPageProxy } from "pdfjs-dist";
+ 
+ const renderedPages: RenderedPage[] = [];
+ const renderedLayers: HTMLElement[] = [];
+ let currentPage = 1;
+ let scale = 1.25;
+ let pdf: import("pdfjs-dist").PDFDocumentProxy;
+@@ -35,20 +36,21 @@ async function renderAll(): Promise<void> {
+   updatePageInfo(document.getElementById("pageInfo")!, currentPage, pdf.numPages);
+ }
+ 
+ function scrollToPage(n: number): void {
+   const pages = document.getElementById("pages")!;
+   const target = pages.children[n - 1] as HTMLElement | undefined;
+   target?.scrollIntoView({ behavior: "smooth", block: "start" });
+ }
+ 
+ async function init(): Promise<void> {
++  configureRuntime();
+   const file = getFileParam();
+   const app = document.getElementById("app")!;
+   app.appendChild(
+     createToolbar({
+       onNavigate: (delta) => { const n = Math.min(Math.max(currentPage + delta, 1), pdf.numPages); currentPage = n; scrollToPage(n); },
+       onZoom: async (f) => { scale = Math.min(Math.max(scale * f, 0.5), 4); await renderAll(); scrollToPage(currentPage); },
+       onFind: (q) => {
+         const results = findInSpans(renderedPages.flatMap((r, i) => r.textSpans.map((s) => ({ ...s, pageNumber: i + 1 }))), q);
+         const refs = results.map((r) => ({ pageNumber: r.pageNumber, spanIndex: r.spanIndex }));
+         highlightSpans(renderedLayers, refs);

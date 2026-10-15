@@ -1,0 +1,106 @@
+﻿# Review package: 5abd145a80322ec5210bd9c9cb165d9c4fefb490..HEAD
+
+## Commits
+15ddb3c feat: content script PDF detection with iframe fallback
+
+## Files changed
+ src/content/contentscript.ts     | 41 +++++++++++++++++++++++++++++++++++++++-
+ src/content/contentstyle.css     |  3 +++
+ tests/unit/contentscript.test.ts | 34 +++++++++++++++++++++++++++++++++
+ 3 files changed, 77 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/src/content/contentscript.ts b/src/content/contentscript.ts
+index cb0ff5c..bd1f5bf 100644
+--- a/src/content/contentscript.ts
++++ b/src/content/contentscript.ts
+@@ -1 +1,40 @@
+-export {};
++import type { Message } from "../shared/messages";
++
++export function isPdfUrl(url: string): boolean {
++  const clean = url.split("#")[0].split("?")[0];
++  return /\.pdf$/i.test(clean);
++}
++
++function detectPdfInDom(): boolean {
++  const embeds = document.querySelectorAll("embed[type='application/pdf'], object[type='application/pdf']");
++  const iframes = document.querySelectorAll("iframe[src$='.pdf' i]");
++  return embeds.length > 0 || iframes.length > 0;
++}
++
++function embedViewer(url: string): void {
++  const iframe = document.createElement("iframe");
++  const viewerUrl = chrome.runtime.getURL(`viewer.html?file=${encodeURIComponent(url)}&pdfe=embed`);
++  iframe.src = viewerUrl;
++  iframe.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;z-index:2147483647;");
++  document.documentElement.appendChild(iframe);
++  document.body.classList.add("pdfe-content");
++}
++
++function init(): void {
++  const currentUrl = window.location.href;
++  if (isPdfUrl(currentUrl) && !currentUrl.includes("pdfe=embed")) {
++    window.postMessage({ type: "pdfe:detect-pdf", url: currentUrl }, "*");
++    if (!chrome.extension.isAllowedFileSchemeAccess || document.contentType !== "application/pdf") {
++    }
++  }
++  if (detectPdfInDom()) {
++    const src = (document.querySelector("embed[type='application/pdf']") as HTMLElement | null)?.getAttribute("src");
++    if (src) embedViewer(new URL(src, location.href).href);
++  }
++}
++
++window.addEventListener("message", (event: MessageEvent<Message>) => {
++  if (event.data?.type === "viewer:url") return;
++});
++
++init();
+diff --git a/src/content/contentstyle.css b/src/content/contentstyle.css
+index e69de29..0586da0 100644
+--- a/src/content/contentstyle.css
++++ b/src/content/contentstyle.css
+@@ -0,0 +1,3 @@
++html:has(> body.pdfe-content) {
++  overflow: hidden;
++}
+diff --git a/tests/unit/contentscript.test.ts b/tests/unit/contentscript.test.ts
+new file mode 100644
+index 0000000..39ab53a
+--- /dev/null
++++ b/tests/unit/contentscript.test.ts
+@@ -0,0 +1,34 @@
++import { describe, expect, it, vi } from "vitest";
++
++vi.hoisted(() => {
++  globalThis.window = {
++    location: { href: "about:blank" },
++    postMessage: () => {},
++    addEventListener: () => {},
++  } as any;
++  globalThis.document = {
++    contentType: "",
++    querySelector: () => null,
++    querySelectorAll: () => [],
++    documentElement: {},
++    body: {},
++  } as any;
++  globalThis.chrome = {
++    runtime: { getURL: (p: string) => `chrome-extension://__EXTENSION_ID__/${p}` },
++    extension: { isAllowedFileSchemeAccess: (() => {}) as any },
++  } as any;
++});
++
++import { isPdfUrl } from "../../src/content/contentscript";
++
++describe("isPdfUrl", () => {
++  it("matches .pdf urls", () => {
++    expect(isPdfUrl("https://x.com/a.pdf")).toBe(true);
++    expect(isPdfUrl("https://x.com/a.PDF?token=1")).toBe(true);
++    expect(isPdfUrl("https://x.com/a.pdf#page=3")).toBe(true);
++  });
++  it("rejects non-pdf urls", () => {
++    expect(isPdfUrl("https://x.com/a.html")).toBe(false);
++    expect(isPdfUrl("https://x.com/a.pdfx")).toBe(false);
++  });
++});

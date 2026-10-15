@@ -1,0 +1,211 @@
+﻿# Review package: 35a19d0e26cee6d9d0211bf32b72d00e9504210d..HEAD
+
+## Commits
+ea4d4df feat: bind smart panel to pipeline with OCR status and semantic search
+
+## Files changed
+ src/viewer/smartPanel.ts      | 71 ++++++++++++++++++++++++++++++++++++++++---
+ src/viewer/viewer.ts          | 29 ++++++++++++++++--
+ tests/unit/smartPanel.test.ts | 20 ++++++++++++
+ 3 files changed, 113 insertions(+), 7 deletions(-)
+
+## Diff
+diff --git a/src/viewer/smartPanel.ts b/src/viewer/smartPanel.ts
+index 4878654..3a08c59 100644
+--- a/src/viewer/smartPanel.ts
++++ b/src/viewer/smartPanel.ts
+@@ -1,25 +1,86 @@
++import type { EngineState, SearchResult } from "../shared/types";
++import type { EnginePipeline } from "../engine/pipeline";
++
++export interface SmartPanelCallbacks {
++  pipeline: EnginePipeline;
++  onHighlight: (pageNumber: number) => void;
++}
++
+ export function createSmartPanel(): HTMLElement {
+   const panel = document.createElement("aside");
+   panel.id = "smartPanel";
+   panel.innerHTML = `
+     <nav>
+       <button data-tab="ocr" class="active">OCR</button>
+       <button data-tab="search">Akıllı Arama</button>
+       <button data-tab="summary">Özet</button>
+       <button data-tab="extract">Veri</button>
+     </nav>
+-    <section id="tab-ocr"></section>
+-    <section id="tab-search" hidden></section>
+-    <section id="tab-summary" hidden></section>
+-    <section id="tab-extract" hidden></section>
++    <section id="tab-ocr">
++      <div id="ocrStatus">Hazır</div>
++      <div id="ocrProgressWrap" hidden><progress id="ocrProgress" max="1" value="0"></progress></div>
++    </section>
++    <section id="tab-search" hidden>
++      <input id="semanticInput" type="search" placeholder="Anlamlı ara…" />
++      <ul id="searchResults"></ul>
++    </section>
++    <section id="tab-summary" hidden>
++      <button id="summarizeBtn">Özetle</button>
++      <div id="summaryOutput"></div>
++    </section>
++    <section id="tab-extract" hidden>
++      <button id="extractBtn">Verileri Çıkar</button>
++      <div id="extractOutput"></div>
++    </section>
+   `;
+   panel.querySelectorAll<HTMLButtonElement>("nav button").forEach((btn) => {
+     btn.onclick = () => {
+       panel.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
+       btn.classList.add("active");
+       panel.querySelectorAll("section").forEach((s) => (s.hidden = true));
+       panel.querySelector<HTMLElement>(`#tab-${btn.dataset.tab}`)!.hidden = false;
+     };
+   });
+   return panel;
+-}
+\ No newline at end of file
++}
++
++export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { setState(s: EngineState): void } {
++  const status = panel.querySelector<HTMLElement>("#ocrStatus")!;
++  const progressWrap = panel.querySelector<HTMLElement>("#ocrProgressWrap")!;
++  const progress = panel.querySelector<HTMLProgressElement>("#ocrProgress")!;
++  const input = panel.querySelector<HTMLInputElement>("#semanticInput")!;
++  const resultsEl = panel.querySelector<HTMLElement>("#searchResults")!;
++
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  input.addEventListener("input", () => {
++    clearTimeout(timer);
++    const q = input.value.trim();
++    if (q.length < 2) return;
++    timer = setTimeout(async () => {
++      const results = await cb.pipeline.search(q);
++      renderResults(results);
++    }, 300);
++  });
++
++  function renderResults(results: SearchResult[]): void {
++    resultsEl.innerHTML = "";
++    for (const r of results) {
++      const li = document.createElement("li");
++      li.textContent = `${r.pageNumber}. sayfa — ${r.span.text.slice(0, 60)}`;
++      li.onclick = () => cb.onHighlight(r.pageNumber);
++      resultsEl.appendChild(li);
++    }
++  }
++
++  return {
++    setState(s: EngineState): void {
++      status.textContent =
++        s.ocr === "loading" ? "OCR yükleniyor…" :
++        s.ocr === "running" ? "OCR çalışıyor…" :
++        s.ocr === "done" ? "OCR tamamlandı" :
++        s.ocr === "failed" ? "OCR başarısız" : "Hazır";
++      progressWrap.hidden = s.ocr !== "running";
++      progress.value = s.ocrProgress;
++    },
++  };
++}
+diff --git a/src/viewer/viewer.ts b/src/viewer/viewer.ts
+index c09d0cc..04668ef 100644
+--- a/src/viewer/viewer.ts
++++ b/src/viewer/viewer.ts
+@@ -1,17 +1,21 @@
+ import "./viewer.css";
+ import { loadDocument } from "./pdfLoader";
+ import { renderPage, type RenderedPage } from "./pageRenderer";
+ import { createToolbar, updatePageInfo } from "./toolbar";
+ import { findInSpans, type FindResult } from "./findBar";
+ import { highlightSpans } from "./highlight";
+-import { createSmartPanel } from "./smartPanel";
++import { createSmartPanel, bindSmartPanel } from "./smartPanel";
++import { EnginePipeline } from "../engine/pipeline";
++import { OcrEngine } from "../engine/ocr/ocr";
++import { SemanticSearch } from "../engine/search/semantic";
++import type { PDFPageProxy } from "pdfjs-dist";
+ 
+ const renderedPages: RenderedPage[] = [];
+ const renderedLayers: HTMLElement[] = [];
+ let currentPage = 1;
+ let scale = 1.25;
+ let pdf: import("pdfjs-dist").PDFDocumentProxy;
+ 
+ async function renderAll(): Promise<void> {
+   const pages = document.getElementById("pages")!;
+   pages.innerHTML = "";
+@@ -48,25 +52,46 @@ async function init(): Promise<void> {
+         const results = findInSpans(renderedPages.flatMap((r, i) => r.textSpans.map((s) => ({ ...s, pageNumber: i + 1 }))), q);
+         const refs = results.map((r) => ({ pageNumber: r.pageNumber, spanIndex: r.spanIndex }));
+         highlightSpans(renderedLayers, refs);
+       },
+       onToggleSmartPanel: () => { document.getElementById("smartPanel")?.classList.toggle("open"); },
+     })
+   );
+   const pages = document.createElement("div");
+   pages.id = "pages";
+   app.appendChild(pages);
+-  app.appendChild(createSmartPanel());
++
++  const panel = createSmartPanel();
++  app.appendChild(panel);
++
++  const pipeline = new EnginePipeline({
++    ocr: new OcrEngine({
++      langPath: chrome.runtime.getURL("tesseract/"),
++      corePath: chrome.runtime.getURL("tesseract-core/"),
++      workerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
++      lang: "tur",
++    }),
++    semantic: new SemanticSearch(),
++    ocrLangPath: chrome.runtime.getURL("tesseract/"),
++    ocrCorePath: chrome.runtime.getURL("tesseract-core/"),
++    ocrWorkerPath: chrome.runtime.getURL("tesseract/tesseract.min.js"),
++  });
++  const panelApi = bindSmartPanel(panel, { pipeline, onHighlight: (n) => scrollToPage(n) });
++  pipeline.setState((s) => panelApi.setState(s));
+ 
+   pdf = await loadDocument(file);
+   const title = document.getElementById("title");
+   if (title) title.textContent = file.split("/").pop() || file;
+   await renderAll();
++
++  const pageProxies: PDFPageProxy[] = [];
++  for (let i = 1; i <= pdf.numPages; i++) pageProxies.push(await pdf.getPage(i));
++  await pipeline.run(pageProxies, { scale });
+ }
+ 
+ function getFileParam(): string {
+   const url = new URL(location.href);
+   const file = url.searchParams.get("file");
+   return file ? decodeURIComponent(file) : "";
+ }
+ 
+ void init();
+\ No newline at end of file
+diff --git a/tests/unit/smartPanel.test.ts b/tests/unit/smartPanel.test.ts
+new file mode 100644
+index 0000000..28b5631
+--- /dev/null
++++ b/tests/unit/smartPanel.test.ts
+@@ -0,0 +1,20 @@
++import { describe, expect, it, vi } from "vitest";
++import { bindSmartPanel, createSmartPanel } from "../../src/viewer/smartPanel";
++import type { EnginePipeline } from "../../src/engine/pipeline";
++
++describe("smartPanel", () => {
++  it("renders OCR status text", () => {
++    const panel = createSmartPanel();
++    const pipeline = { search: vi.fn().mockResolvedValue([]) } as unknown as EnginePipeline;
++    const api = bindSmartPanel(panel, { pipeline, onHighlight: () => {} });
++    api.setState({ ocr: "running", ocrProgress: 0.5, corpusReady: false, searchReady: false });
++    expect(panel.querySelector("#ocrStatus")!.textContent).toContain("OCR çalışıyor");
++  });
++  it("shows progress bar only while running", () => {
++    const panel = createSmartPanel();
++    const pipeline = { search: vi.fn().mockResolvedValue([]) } as unknown as EnginePipeline;
++    const api = bindSmartPanel(panel, { pipeline, onHighlight: () => {} });
++    api.setState({ ocr: "done", ocrProgress: 1, corpusReady: true, searchReady: true });
++    expect(panel.querySelector<HTMLElement>("#ocrProgressWrap")!.hidden).toBe(true);
++  });
++});

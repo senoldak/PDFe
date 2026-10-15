@@ -1,0 +1,89 @@
+﻿# Review package: da05da635529a53ea920356808cb8f0cd83673bf..HEAD
+
+## Commits
+1346053 feat: build unified document corpus from text layer and OCR
+
+## Files changed
+ src/engine/text/corpus.ts | 13 +++++++++++++
+ src/engine/text/merge.ts  | 18 ++++++++++++++++++
+ tests/unit/corpus.test.ts | 28 ++++++++++++++++++++++++++++
+ 3 files changed, 59 insertions(+)
+
+## Diff
+diff --git a/src/engine/text/corpus.ts b/src/engine/text/corpus.ts
+new file mode 100644
+index 0000000..d70cbb3
+--- /dev/null
++++ b/src/engine/text/corpus.ts
+@@ -0,0 +1,13 @@
++import type { DocumentCorpus, PageText } from "../../shared/types";
++
++export function buildCorpusFromPages(pages: PageText[]): DocumentCorpus {
++  const sorted = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
++  return {
++    pages: sorted,
++    fullText: sorted.map((p) => p.text).join("\n\n"),
++  };
++}
++
++export function corpusHasText(corpus: DocumentCorpus): boolean {
++  return corpus.fullText.trim().length > 0;
++}
+diff --git a/src/engine/text/merge.ts b/src/engine/text/merge.ts
+new file mode 100644
+index 0000000..223d0a9
+--- /dev/null
++++ b/src/engine/text/merge.ts
+@@ -0,0 +1,18 @@
++import type { PageText } from "../../shared/types";
++
++export function mergeTextAndOcr(textLayer: PageText[], ocr: PageText[]): PageText[] {
++  const ocrByPage = new Map(ocr.map((p) => [p.pageNumber, p]));
++  const out: PageText[] = [];
++  for (const page of textLayer) {
++    const ocrPage = ocrByPage.get(page.pageNumber);
++    if (page.text.trim().length === 0 && ocrPage && ocrPage.text.trim().length > 0) {
++      out.push({ ...ocrPage, source: "ocr" });
++    } else {
++      out.push(page);
++    }
++  }
++  for (const p of ocr) {
++    if (!textLayer.some((t) => t.pageNumber === p.pageNumber)) out.push(p);
++  }
++  return out.sort((a, b) => a.pageNumber - b.pageNumber);
++}
+diff --git a/tests/unit/corpus.test.ts b/tests/unit/corpus.test.ts
+new file mode 100644
+index 0000000..de9d3c9
+--- /dev/null
++++ b/tests/unit/corpus.test.ts
+@@ -0,0 +1,28 @@
++import { describe, expect, it } from "vitest";
++import { buildCorpusFromPages, corpusHasText } from "../../src/engine/text/corpus";
++import { mergeTextAndOcr } from "../../src/engine/text/merge";
++import type { PageText } from "../../src/shared/types";
++
++function page(n: number, text: string): PageText {
++  return { pageNumber: n, text, spans: text.split(/\s+/).filter(Boolean).map((t) => ({ text: t })), source: "textlayer" };
++}
++
++describe("corpus", () => {
++  it("sorts pages and joins full text", () => {
++    const c = buildCorpusFromPages([page(2, "iki"), page(1, "bir")]);
++    expect(c.pages[0].pageNumber).toBe(1);
++    expect(c.fullText).toBe("bir\n\niki");
++  });
++  it("detects empty corpus", () => {
++    expect(corpusHasText(buildCorpusFromPages([]))).toBe(false);
++  });
++  it("merge fills empty textlayer pages from ocr", () => {
++    const merged = mergeTextAndOcr([page(1, "dijital"), page(2, "")], [page(2, "taranmış")]);
++    expect(merged.find((p) => p.pageNumber === 2)!.text).toBe("taranmış");
++    expect(merged.find((p) => p.pageNumber === 2)!.source).toBe("ocr");
++  });
++  it("merge keeps digital text when ocr also exists", () => {
++    const merged = mergeTextAndOcr([page(1, "dijital")], [page(1, "ocr çıktısı")]);
++    expect(merged.find((p) => p.pageNumber === 1)!.text).toBe("dijital");
++  });
++});

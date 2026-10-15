@@ -1,0 +1,209 @@
+﻿# Review package: 5467ccb0b8a7ce01da8bef773feb77bf0d6c264a..HEAD
+
+## Commits
+5abd145 feat: register DNR rules to redirect PDFs to the viewer
+
+## Files changed
+ public/manifest.json          | 36 ++++++++++++++++-
+ src/background/background.ts  | 93 ++++++++++++++++++++++++++++++++++++++++++-
+ tests/unit/background.test.ts | 33 +++++++++++++++
+ 3 files changed, 159 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/public/manifest.json b/public/manifest.json
+index 26addb3..2ac3726 100644
+--- a/public/manifest.json
++++ b/public/manifest.json
+@@ -1,18 +1,50 @@
+ {
+   "manifest_version": 3,
+   "name": "PDFE — Yerel Akıllı PDF",
+   "version": "0.1.0",
+   "description": "Tarayıcıda açılan PDF'leri tamamen yerel akıllı araçlarla işler: OCR, anlamsal arama, özetleme, veri çıkarma.",
+   "minimum_chrome_version": "128",
++  "permissions": [
++    "declarativeNetRequestWithHostAccess",
++    "tabs",
++    "webNavigation",
++    "storage"
++  ],
++  "host_permissions": ["<all_urls>"],
++  "background": { "service_worker": "background.js", "type": "module" },
++  "content_scripts": [
++    {
++      "matches": ["http://*/*", "https://*/*", "file://*/*"],
++      "run_at": "document_start",
++      "all_frames": true,
++      "css": ["contentstyle.css"],
++      "js": ["contentscript.js"]
++    }
++  ],
+   "content_security_policy": {
+     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+   },
+   "icons": {
+     "16": "icons/icon16.png",
+     "48": "icons/icon48.png",
+     "128": "icons/icon128.png"
+   },
+   "action": {
+     "default_title": "PDFE"
+-  }
+-}
++  },
++  "web_accessible_resources": [
++    {
++      "resources": [
++        "viewer.html",
++        "pdf.worker.mjs",
++        "models/*",
++        "http:/*",
++        "https:/*",
++        "file:/*",
++        "blob:*",
++        "data:*"
++      ],
++      "matches": ["<all_urls>"]
++    }
++  ]
++}
+\ No newline at end of file
+diff --git a/src/background/background.ts b/src/background/background.ts
+index cb0ff5c..c39b961 100644
+--- a/src/background/background.ts
++++ b/src/background/background.ts
+@@ -1 +1,92 @@
+-export {};
++const VIEWER_URL = chrome.runtime.getURL("viewer.html");
++
++export function getViewerUrl(pdfUrl: string, baseUrl = VIEWER_URL): string {
++  const hashIndex = pdfUrl.indexOf("#");
++  let hash = "";
++  if (hashIndex > 0) {
++    hash = pdfUrl.slice(hashIndex);
++    pdfUrl = pdfUrl.slice(0, hashIndex);
++  }
++  return `${baseUrl}?file=${encodeURIComponent(pdfUrl)}${hash}`;
++}
++
++async function registerRedirectRule(): Promise<void> {
++  const rules = await chrome.declarativeNetRequest.getDynamicRules();
++  if (rules.length) {
++    await chrome.declarativeNetRequest.updateDynamicRules({
++      removeRuleIds: rules.map((r) => r.id),
++    });
++  }
++
++  const redirectToViewer = {
++    type: "redirect",
++    redirect: { regexSubstitution: `${VIEWER_URL}?file=\\0` },
++  } as const;
++
++  const addRules = [
++    {
++      id: 1,
++      priority: 2,
++      condition: { urlFilter: "pdfe.action=download", resourceTypes: ["main_frame", "sub_frame"] },
++      action: { type: "allow" as const },
++    },
++    {
++      id: 2,
++      priority: 1,
++      condition: {
++        regexFilter: "^.*$",
++        excludedRequestMethods: ["post"],
++        resourceTypes: ["main_frame", "sub_frame"],
++        responseHeaders: [{ header: "content-type", values: ["application/pdf", "application/pdf;*"] }],
++      },
++      action: redirectToViewer,
++    },
++    {
++      id: 3,
++      priority: 1,
++      condition: {
++        regexFilter: "^.*\\.pdf\\b.*$",
++        excludedRequestMethods: ["post"],
++        resourceTypes: ["main_frame", "sub_frame"],
++        responseHeaders: [
++          { header: "content-type", values: ["application/octet-stream", "application/octet-stream;*"] },
++        ],
++      },
++      action: redirectToViewer,
++    },
++  ];
++
++  try {
++    await chrome.declarativeNetRequest.updateDynamicRules({ addRules: addRules as any });
++  } catch (e) {
++    console.error("DNR rule registration failed; falling back to content script.", e);
++  }
++}
++
++chrome.runtime.onInstalled.addListener(() => {
++  void registerRedirectRule();
++});
++chrome.runtime.onStartup.addListener(() => {
++  void registerRedirectRule();
++});
++
++chrome.webNavigation.onBeforeNavigate.addListener(
++  (details) => {
++    if (details.frameId !== 0) return;
++    chrome.extension.isAllowedFileSchemeAccess((isAllowed) => {
++      if (isAllowed) return;
++      chrome.tabs.update(details.tabId, { url: getViewerUrl(details.url) });
++    });
++  },
++  { url: [{ urlPrefix: "file://", pathSuffix: ".pdf" }, { urlPrefix: "file://", pathSuffix: ".PDF" }] }
++);
++
++chrome.runtime.onMessage.addListener((message: any, _sender, sendResponse) => {
++  if (message?.type === "viewer:get-url") {
++    sendResponse({ type: "viewer:url", url: getViewerUrl(message.file ?? "") });
++    return true;
++  }
++  return undefined;
++});
++
++export {};
+\ No newline at end of file
+diff --git a/tests/unit/background.test.ts b/tests/unit/background.test.ts
+new file mode 100644
+index 0000000..6eabd0d
+--- /dev/null
++++ b/tests/unit/background.test.ts
+@@ -0,0 +1,33 @@
++import { describe, expect, it, vi } from "vitest";
++
++vi.hoisted(() => {
++  const addListener = () => {};
++  globalThis.chrome = {
++    runtime: {
++      getURL: (p: string) => `chrome-extension://__EXTENSION_ID__/${p}`,
++      onInstalled: { addListener },
++      onStartup: { addListener },
++      onMessage: { addListener },
++    },
++    webNavigation: { onBeforeNavigate: { addListener } },
++  } as any;
++});
++
++import { getViewerUrl } from "../../src/background/background";
++
++const BASE = "chrome-extension://__EXTENSION_ID__/viewer.html";
++
++describe("getViewerUrl", () => {
++  it("encodes the pdf url as file param", () => {
++    const url = getViewerUrl("https://example.com/a.pdf", BASE);
++    expect(url).toBe(
++      "chrome-extension://__EXTENSION_ID__/viewer.html?file=" + encodeURIComponent("https://example.com/a.pdf")
++    );
++  });
++
++  it("keeps fragment out of the encoded file param", () => {
++    const url = getViewerUrl("https://example.com/a.pdf#page=2", BASE);
++    expect(url).toContain("?file=" + encodeURIComponent("https://example.com/a.pdf"));
++    expect(url.endsWith("#page=2")).toBe(true);
++  });
++});
+\ No newline at end of file

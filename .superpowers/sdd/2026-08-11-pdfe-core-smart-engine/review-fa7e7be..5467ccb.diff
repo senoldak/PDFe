@@ -1,0 +1,114 @@
+﻿# Review package: fa7e7be0334bcb87a275591e8547434c10feb413..HEAD
+
+## Commits
+5467ccb feat: define shared types and message protocol
+
+## Files changed
+ src/shared/messages.ts   | 17 +++++++++++++++++
+ src/shared/types.ts      | 48 ++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/unit/types.test.ts | 16 ++++++++++++++++
+ 3 files changed, 81 insertions(+)
+
+## Diff
+diff --git a/src/shared/messages.ts b/src/shared/messages.ts
+new file mode 100644
+index 0000000..420bc33
+--- /dev/null
++++ b/src/shared/messages.ts
+@@ -0,0 +1,17 @@
++import type { DocumentCorpus, SearchResult, ExtractionResult, EngineState } from "./types";
++
++export type Message =
++  | { type: "engine:ocr-progress"; progress: number }
++  | { type: "engine:corpus-ready"; corpus: DocumentCorpus }
++  | { type: "engine:state"; state: EngineState }
++  | { type: "engine:search"; query: string }
++  | { type: "engine:search-results"; results: SearchResult[] }
++  | { type: "engine:summarize"; text: string }
++  | { type: "engine:summary"; summary: string }
++  | { type: "engine:extract"; schemaId: string }
++  | { type: "engine:extracted"; result: ExtractionResult }
++  | { type: "viewer:navigate"; page: number }
++  | { type: "viewer:get-url" }
++  | { type: "viewer:url"; url: string };
++
++export type MessageHandler = (msg: Message) => void;
+\ No newline at end of file
+diff --git a/src/shared/types.ts b/src/shared/types.ts
+new file mode 100644
+index 0000000..cdf6320
+--- /dev/null
++++ b/src/shared/types.ts
+@@ -0,0 +1,48 @@
++export interface Bbox {
++  x0: number;
++  y0: number;
++  x1: number;
++  y1: number;
++}
++
++export interface TextSpan {
++  text: string;
++  bbox?: Bbox;
++  confidence?: number;
++}
++
++export interface PageText {
++  pageNumber: number;
++  text: string;
++  spans: TextSpan[];
++  source: "textlayer" | "ocr";
++}
++
++export interface DocumentCorpus {
++  pages: PageText[];
++  fullText: string;
++}
++
++export interface SearchResult {
++  pageNumber: number;
++  spanIndex: number;
++  span: TextSpan;
++  score: number;
++  kind: "semantic" | "literal" | "regex";
++}
++
++export interface ExtractionResult {
++  [field: string]: string | number | null;
++}
++
++export type OcrStatus = "idle" | "loading" | "running" | "done" | "failed";
++export type EngineState = {
++  ocr: OcrStatus;
++  ocrProgress: number; // 0..1
++  corpusReady: boolean;
++  searchReady: boolean;
++};
++
++export interface ExtractionSchema {
++  fields: Record<string, { label: string; pattern: string }>;
++}
+\ No newline at end of file
+diff --git a/tests/unit/types.test.ts b/tests/unit/types.test.ts
+new file mode 100644
+index 0000000..535cf48
+--- /dev/null
++++ b/tests/unit/types.test.ts
+@@ -0,0 +1,16 @@
++import { describe, expect, it } from "vitest";
++import type { DocumentCorpus, PageText } from "../../src/shared/types";
++
++describe("shared types", () => {
++  it("DocumentCorpus is built from PageText items", () => {
++    const page: PageText = {
++      pageNumber: 1,
++      text: "hello",
++      spans: [{ text: "hello", bbox: { x0: 0, y0: 0, x1: 10, y1: 10 } }],
++      source: "textlayer",
++    };
++    const corpus: DocumentCorpus = { pages: [page], fullText: "hello" };
++    expect(corpus.pages[0].text).toBe("hello");
++    expect(corpus.fullText).toContain("hello");
++  });
++});
+\ No newline at end of file

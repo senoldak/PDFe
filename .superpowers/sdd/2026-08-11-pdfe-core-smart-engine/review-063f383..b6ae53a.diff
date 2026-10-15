@@ -1,0 +1,180 @@
+﻿# Review package: 063f383f15611f50d7608e2a7a24350e9d5cb021..HEAD
+
+## Commits
+b6ae53a feat: add template-based data extraction for invoices and general fields
+
+## Files changed
+ src/engine/extract/extract.ts | 16 ++++++++++++++++
+ src/engine/extract/schemas.ts | 21 +++++++++++++++++++++
+ src/viewer/smartPanel.ts      | 23 +++++++++++++++++++++++
+ tests/unit/extract.test.ts    | 32 ++++++++++++++++++++++++++++++++
+ 4 files changed, 92 insertions(+)
+
+## Diff
+diff --git a/src/engine/extract/extract.ts b/src/engine/extract/extract.ts
+new file mode 100644
+index 0000000..7ecb0b9
+--- /dev/null
++++ b/src/engine/extract/extract.ts
+@@ -0,0 +1,16 @@
++import type { DocumentCorpus, ExtractionResult, ExtractionSchema } from "../../shared/types";
++
++export function extractFields(corpus: DocumentCorpus, schema: ExtractionSchema): ExtractionResult {
++  const result: ExtractionResult = {};
++  const text = corpus.fullText;
++  for (const [key, field] of Object.entries(schema.fields)) {
++    try {
++      const re = new RegExp(field.pattern, "gi");
++      const match = text.match(re);
++      result[key] = match ? match[0] : null;
++    } catch {
++      result[key] = null;
++    }
++  }
++  return result;
++}
+diff --git a/src/engine/extract/schemas.ts b/src/engine/extract/schemas.ts
+new file mode 100644
+index 0000000..8634327
+--- /dev/null
++++ b/src/engine/extract/schemas.ts
+@@ -0,0 +1,21 @@
++import type { ExtractionSchema } from "../../shared/types";
++
++export const INVOICE_SCHEMA: ExtractionSchema = {
++  fields: {
++    faturaNo: { label: "Fatura No", pattern: "\\b(?:[A-Z]{1,3}\\s?)?\\d{3,10}\\b" },
++    tarih: { label: "Tarih", pattern: "\\b\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}\\b" },
++    tutar: { label: "Tutar", pattern: "(?:\\d{1,3}(?:\\.\\d{3})*,\\d{2}|\\d+\\.\\d{2}(?![\\d.]))\\s?(?:TL|₺|TRY)?\\b" },
++    kdv: { label: "KDV", pattern: "(?:KDV|K.D.V.)\\s*(?:%\\s*)?\\d{1,2}" },
++    iban: { label: "IBAN", pattern: "\\bTR\\d{2}\\s?(?:\\d{4}\\s?){5}\\d{2}\\b" },
++    tedarikci: { label: "Tedarikçi", pattern: "(?<=Tedarikçi\\s*:\\s*)[A-Z][^\\n,;]{2,60}" },
++  },
++};
++
++export const GENERAL_SCHEMA: ExtractionSchema = {
++  fields: {
++    email: { label: "E-posta", pattern: "[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+" },
++    telefon: { label: "Telefon", pattern: "(?:\\+90\\s?|0\\s?)?(?:\\d{3}\\s?\\d{3}\\s?\\d{2}\\s?\\d{2}|\\d{10})" },
++    tcNo: { label: "TC Kimlik No", pattern: "\\b\\d{11}\\b" },
++    tarih: { label: "Tarih", pattern: "\\b\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}\\b" },
++  },
++};
+diff --git a/src/viewer/smartPanel.ts b/src/viewer/smartPanel.ts
+index 0ed665b..08efb17 100644
+--- a/src/viewer/smartPanel.ts
++++ b/src/viewer/smartPanel.ts
+@@ -1,13 +1,15 @@
+ import type { DocumentCorpus, EngineState, SearchResult } from "../shared/types";
+ import type { EnginePipeline } from "../engine/pipeline";
+ import type { Summarizer } from "../engine/summarize/summarizer";
++import { extractFields } from "../engine/extract/extract";
++import { INVOICE_SCHEMA } from "../engine/extract/schemas";
+ 
+ export interface SmartPanelCallbacks {
+   pipeline: EnginePipeline;
+   onHighlight: (result: SearchResult) => void;
+   summarizer?: Summarizer;
+   getCorpus?: () => DocumentCorpus | null;
+ }
+ 
+ export function createSmartPanel(): HTMLElement {
+   const panel = document.createElement("aside");
+@@ -48,38 +50,59 @@ export function createSmartPanel(): HTMLElement {
+ }
+ 
+ export function bindSmartPanel(panel: HTMLElement, cb: SmartPanelCallbacks): { setState(s: EngineState): void } {
+   const status = panel.querySelector<HTMLElement>("#ocrStatus")!;
+   const progressWrap = panel.querySelector<HTMLElement>("#ocrProgressWrap")!;
+   const progress = panel.querySelector<HTMLProgressElement>("#ocrProgress")!;
+   const input = panel.querySelector<HTMLInputElement>("#semanticInput")!;
+   const resultsEl = panel.querySelector<HTMLElement>("#searchResults")!;
+   const summarizeBtn = panel.querySelector<HTMLButtonElement>("#summarizeBtn")!;
+   const summaryOutput = panel.querySelector<HTMLElement>("#summaryOutput")!;
++  const extractBtn = panel.querySelector<HTMLButtonElement>("#extractBtn")!;
++  const extractOutput = panel.querySelector<HTMLElement>("#extractOutput")!;
+ 
+   let timer: ReturnType<typeof setTimeout> | undefined;
+   input.addEventListener("input", () => {
+     clearTimeout(timer);
+     const q = input.value.trim();
+     if (q.length < 2) return;
+     timer = setTimeout(async () => {
+       const results = await cb.pipeline.search(q);
+       renderResults(results);
+     }, 300);
+   });
+ 
+   summarizeBtn.addEventListener("click", async () => {
+     const corpus = cb.getCorpus?.() ?? null;
+     if (!cb.summarizer || !corpus) return;
+     summaryOutput.textContent = await cb.summarizer.summarize(corpus.fullText);
+   });
+ 
++  extractBtn.addEventListener("click", () => {
++    const corpus = cb.getCorpus?.() ?? null;
++    if (!corpus) return;
++    const result = extractFields(corpus, INVOICE_SCHEMA);
++    extractOutput.innerHTML = "";
++    const table = document.createElement("table");
++    for (const [key, field] of Object.entries(INVOICE_SCHEMA.fields)) {
++      const row = document.createElement("tr");
++      const labelCell = document.createElement("td");
++      labelCell.textContent = field.label;
++      const valueCell = document.createElement("td");
++      const value = result[key];
++      valueCell.textContent = value == null ? "—" : String(value);
++      row.append(labelCell, valueCell);
++      table.appendChild(row);
++    }
++    extractOutput.appendChild(table);
++  });
++
+   function renderResults(results: SearchResult[]): void {
+     resultsEl.innerHTML = "";
+     for (const r of results) {
+       const li = document.createElement("li");
+       li.textContent = `${r.pageNumber}. sayfa — ${r.span.text.slice(0, 60)}`;
+       li.onclick = () => cb.onHighlight(r);
+       resultsEl.appendChild(li);
+     }
+   }
+ 
+diff --git a/tests/unit/extract.test.ts b/tests/unit/extract.test.ts
+new file mode 100644
+index 0000000..79d5048
+--- /dev/null
++++ b/tests/unit/extract.test.ts
+@@ -0,0 +1,32 @@
++import { describe, expect, it } from "vitest";
++import { extractFields } from "../../src/engine/extract/extract";
++import { GENERAL_SCHEMA, INVOICE_SCHEMA } from "../../src/engine/extract/schemas";
++import type { DocumentCorpus } from "../../src/shared/types";
++
++function corpus(text: string): DocumentCorpus {
++  return { pages: [{ pageNumber: 1, text, spans: [], source: "textlayer" }], fullText: text };
++}
++
++describe("extractFields", () => {
++  it("extracts invoice fields", () => {
++    const text = "FATURA No: 2026/0001\nTarih: 15.03.2026\nTutar: 1.250,00 TL\nKDV %20\nIBAN TR12 0001 2003 1234 5678 9012 34\nTedarikçi: Acme Ltd";
++    const r = extractFields(corpus(text), INVOICE_SCHEMA);
++    expect(r.faturaNo).toMatch(/\d{3,10}/);
++    expect(r.tarih).toBe("15.03.2026");
++    expect(r.tutar).toBe("1.250,00 TL");
++    expect(r.kdv).toContain("20");
++    expect(r.iban).toContain("TR12");
++    expect(r.tedarikci).toBe("Acme Ltd");
++  });
++  it("extracts general fields", () => {
++    const text = "Mail: ali@ornek.com Tel: 0532 123 45 67 TC: 12345678901";
++    const r = extractFields(corpus(text), GENERAL_SCHEMA);
++    expect(r.email).toBe("ali@ornek.com");
++    expect(r.telefon).toContain("0532");
++    expect(r.tcNo).toBe("12345678901");
++  });
++  it("returns null for missing fields", () => {
++    const r = extractFields(corpus("bos"), INVOICE_SCHEMA);
++    expect(r.iban).toBeNull();
++  });
++});
